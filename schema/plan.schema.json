@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "App Shot Editor compose plan",
+  "description": "Input to `appshot compose|publish`. The skill writes this after pairing benefits with uploaded screenshots.",
+  "type": "object",
+  "required": ["name", "screens"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "description": "Project name (usually the app name)." },
+    "canvasWidth": { "type": "number", "default": 280 },
+    "canvasHeight": { "type": "number", "default": 600 },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["headline", "background", "deviceId", "screenshot"],
+        "additionalProperties": false,
+        "properties": {
+          "headline": { "type": "string", "description": "Short benefit-driven headline." },
+          "headlineColor": { "type": "string", "description": "Hex color, defaults to #ffffff." },
+          "deviceId": {
+            "type": "string",
+            "description": "Device frame id (e.g. iphone_16_pro, pixel_9_pro, ipad_pro_13_m4)."
+          },
+          "screenshot": {
+            "type": "object",
+            "required": ["url", "width", "height"],
+            "additionalProperties": false,
+            "properties": {
+              "url": { "type": "string", "description": "Asset url from the upload manifest." },
+              "width": { "type": "number" },
+              "height": { "type": "number" }
+            }
+          },
+          "background": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "enum": ["solid", "gradient"] },
+              "color": { "type": "string", "description": "For type=solid." },
+              "gradient": {
+                "type": "object",
+                "properties": {
+                  "type": { "enum": ["linear", "radial"] },
+                  "colorStops": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["offset", "color"],
+                      "properties": {
+                        "offset": { "type": "number" },
+                        "color": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
