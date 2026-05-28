@@ -1,0 +1,17 @@
+{
+  "name": "app-store-screenshots-skill",
+  "private": true,
+  "version": "0.1.0",
+  "description": "App Store Screenshots — Agent Skill CLI (bundled, self-contained Node 22+ binary).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@appshoteditor/shot-dsl": "^0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

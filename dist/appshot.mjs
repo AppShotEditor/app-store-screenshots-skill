@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-// skill/appshot-screenshots/src/cli.ts
+// src/cli.ts
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 
-// src/lib/shot-dsl/types.ts
+// node_modules/@appshoteditor/shot-dsl/src/types.ts
 var CURRENT_SCHEMA_VERSION = 2;
 
-// src/lib/shot-dsl/validate.ts
+// node_modules/@appshoteditor/shot-dsl/src/validate.ts
 var LAYER_TYPES = ["background", "text", "image", "device", "shape"];
 function isValidLayerJSON(data) {
   if (!data || typeof data !== "object") return false;
@@ -50,7 +50,7 @@ function validateTemplate(data) {
   return { valid: errors.length === 0, errors };
 }
 
-// src/lib/shot-dsl/builders.ts
+// node_modules/@appshoteditor/shot-dsl/src/builders.ts
 var DEFAULT_CANVAS_WIDTH = 280;
 var DEFAULT_CANVAS_HEIGHT = 600;
 function makeTextLayer(opts) {
@@ -107,7 +107,7 @@ function makeTemplate(opts) {
   };
 }
 
-// src/lib/device-frames.ts
+// node_modules/@appshoteditor/shot-dsl/src/device-frames.ts
 var deviceFrames = [
   // -------------------------------------------------------------------------
   // iOS PHONES
@@ -383,7 +383,7 @@ function getDeviceFrame(id) {
   return deviceFrames.find((d) => d.id === id);
 }
 
-// src/lib/shot-dsl/frames.ts
+// node_modules/@appshoteditor/shot-dsl/src/frames.ts
 var DEFAULT_CANVAS_WIDTH2 = 280;
 var DEFAULT_CANVAS_HEIGHT2 = 600;
 function calculateDeviceScale(device, canvasWidth = DEFAULT_CANVAS_WIDTH2, canvasHeight = DEFAULT_CANVAS_HEIGHT2) {
@@ -485,7 +485,7 @@ function makeDeviceFrameLayers(opts) {
   return { screenshot, frame };
 }
 
-// src/lib/shot-dsl/compose.ts
+// node_modules/@appshoteditor/shot-dsl/src/compose.ts
 function composeTemplate(plan) {
   const canvasWidth = plan.canvasWidth ?? 280;
   const canvasHeight = plan.canvasHeight ?? 600;
@@ -523,7 +523,7 @@ function composeTemplate(plan) {
   return makeTemplate({ name: plan.name, screens, tags: ["generated"] });
 }
 
-// skill/appshot-screenshots/src/cli.ts
+// src/cli.ts
 var BASE = (process.env.APPSHOTEDITOR_URL ?? "https://appshoteditor.com").replace(/\/$/, "");
 var TOKEN = process.env.APPSHOTEDITOR_TOKEN;
 function fail(message) {

@@ -48,7 +48,9 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 ## Contents
 
 - `SKILL.md` — the orchestration the agent reads.
-- `dist/appshot.mjs` — self-contained CLI: `upload`, `compose`, `publish`.
+- `src/cli.ts` — CLI source (`upload`, `compose`, `publish`).
+- `scripts/build.mjs` — esbuild config that produces the bundle.
+- `dist/appshot.mjs` — self-contained Node bundle (committed; what end users run).
 - `schema/plan.schema.json` — the compose-plan format.
 
 ## CLI (used by the skill)
@@ -66,7 +68,12 @@ Handoff links are valid for 24 hours.
 
 ## Development
 
-Source and build live in the main app repo (`AppShotEditor/app-shot-editor`, under
-`skill/appshot-screenshots/`). The CLI shares the editor's layout DSL (`src/lib/shot-dsl/`) and device
-geometry; `npm run build:skill` bundles them into `dist/appshot.mjs`. The DSL `schemaVersion` is the
-compatibility contract — when it changes, rebuild and re-publish the bundle here.
+```bash
+npm install   # fetches @appshoteditor/shot-dsl + esbuild
+npm run build # bundles src/cli.ts (+ DSL) → dist/appshot.mjs
+```
+
+The layout DSL + device geometry come from
+[`@appshoteditor/shot-dsl`](https://www.npmjs.com/package/@appshoteditor/shot-dsl) on npm — the same
+package the editor uses, so a layout composed here renders identically there. Bump the dep + rebuild
+whenever the DSL changes. The DSL `schemaVersion` is the compatibility contract.
