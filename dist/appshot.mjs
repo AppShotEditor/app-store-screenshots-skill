@@ -530,11 +530,33 @@ function fail(message) {
   console.error(`appshot: ${message}`);
   process.exit(1);
 }
+var ACCOUNT_HELP = `You need a free appshoteditor.com account.
+  1. Open ${BASE}/account and sign in with Google (this creates your account).
+  2. Generate an API token there.
+  3. export APPSHOTEDITOR_TOKEN=ase_\u2026  then re-run.`;
 function authHeaders() {
   if (!TOKEN) {
-    fail("APPSHOTEDITOR_TOKEN is not set. Sign in at " + BASE + "/account and generate a token.");
+    fail(`APPSHOTEDITOR_TOKEN is not set.
+${ACCOUNT_HELP}`);
   }
   return { Authorization: `Bearer ${TOKEN}` };
+}
+async function whoami() {
+  const headers = authHeaders();
+  const res = await fetch(`${BASE}/api/screenshots`, { headers });
+  if (res.status === 401) {
+    fail(`token rejected (401) by ${BASE}.
+${ACCOUNT_HELP}`);
+  }
+  if (!res.ok) fail(`could not verify token: ${res.status} ${await res.text()}`);
+  const { assets, usage } = await res.json();
+  const usedMB = ((usage?.usedBytes ?? 0) / (1024 * 1024)).toFixed(1);
+  console.log(
+    `\u2713 Token valid \u2014 ${BASE}
+  plan: ${usage?.tier ?? "free"}
+  storage used: ${usedMB} MB
+  screenshots: ${assets?.length ?? 0}`
+  );
 }
 function contentType(file) {
   const ext = extname(file).toLowerCase();
@@ -612,6 +634,9 @@ async function publish(planPath) {
 }
 var [command, ...args] = process.argv.slice(2);
 switch (command) {
+  case "whoami":
+    await whoami();
+    break;
   case "upload":
     await upload(args);
     break;
@@ -622,6 +647,6 @@ switch (command) {
     await publish(args[0]);
     break;
   default:
-    console.error("Usage: appshot <upload files\u2026 | compose plan.json | publish plan.json>");
+    console.error("Usage: appshot <whoami | upload files\u2026 | compose plan.json | publish plan.json>");
     process.exit(1);
 }

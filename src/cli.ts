@@ -8,6 +8,7 @@
  *   node dist/appshot.mjs publish plan.json
  *
  * Commands:
+ *   whoami              Verify APPSHOTEDITOR_TOKEN works (and show plan + storage). Run this FIRST.
  *   upload <files...>   Upload source screenshots; prints a JSON asset manifest
  *                       ({ id, url, width, height, filename }) the model uses to write a plan.
  *   compose <plan.json> Run composeTemplate and print the validated Template JSON (no network).
@@ -25,11 +26,43 @@ function fail(message: string): never {
 	process.exit(1);
 }
 
+/** Guidance shown whenever there's no usable token — covers the first-time (no account) case. */
+const ACCOUNT_HELP =
+	`You need a free appshoteditor.com account.\n` +
+	`  1. Open ${BASE}/account and sign in with Google (this creates your account).\n` +
+	`  2. Generate an API token there.\n` +
+	`  3. export APPSHOTEDITOR_TOKEN=ase_…  then re-run.`;
+
 function authHeaders(): Record<string, string> {
 	if (!TOKEN) {
-		fail('APPSHOTEDITOR_TOKEN is not set. Sign in at ' + BASE + '/account and generate a token.');
+		fail(`APPSHOTEDITOR_TOKEN is not set.\n${ACCOUNT_HELP}`);
 	}
 	return { Authorization: `Bearer ${TOKEN}` };
+}
+
+/**
+ * Pre-flight: confirm the token actually works BEFORE the agent does any expensive work
+ * (analyzing the codebase, collecting screenshots). GET /api/screenshots is bearer-authed and
+ * cheap — 200 returns the user's storage usage; 401 means no/!invalid token (likely no account).
+ */
+async function whoami(): Promise<void> {
+	const headers = authHeaders();
+	const res = await fetch(`${BASE}/api/screenshots`, { headers });
+	if (res.status === 401) {
+		fail(`token rejected (401) by ${BASE}.\n${ACCOUNT_HELP}`);
+	}
+	if (!res.ok) fail(`could not verify token: ${res.status} ${await res.text()}`);
+	const { assets, usage } = (await res.json()) as {
+		assets: unknown[];
+		usage?: { usedBytes: number; tier: string };
+	};
+	const usedMB = ((usage?.usedBytes ?? 0) / (1024 * 1024)).toFixed(1);
+	console.log(
+		`✓ Token valid — ${BASE}\n` +
+			`  plan: ${usage?.tier ?? 'free'}\n` +
+			`  storage used: ${usedMB} MB\n` +
+			`  screenshots: ${assets?.length ?? 0}`
+	);
 }
 
 function contentType(file: string): string {
@@ -116,6 +149,9 @@ async function publish(planPath: string): Promise<void> {
 
 const [command, ...args] = process.argv.slice(2);
 switch (command) {
+	case 'whoami':
+		await whoami();
+		break;
 	case 'upload':
 		await upload(args);
 		break;
@@ -126,6 +162,6 @@ switch (command) {
 		await publish(args[0]);
 		break;
 	default:
-		console.error('Usage: appshot <upload files… | compose plan.json | publish plan.json>');
+		console.error('Usage: appshot <whoami | upload files… | compose plan.json | publish plan.json>');
 		process.exit(1);
 }

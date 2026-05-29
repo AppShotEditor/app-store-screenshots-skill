@@ -59,10 +59,14 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 # point at a local dev server instead of production:
 export APPSHOTEDITOR_URL=http://localhost:5173
 
+node dist/appshot.mjs whoami                  # verify token works; prints plan + storage (run first)
 node dist/appshot.mjs upload shots/*.png      # → { assets: [{ id, url, width, height }] }
 node dist/appshot.mjs compose plan.json       # prints the layout Template JSON (no upload)
 node dist/appshot.mjs publish plan.json        # → https://appshoteditor.com/app?import=<code>
 ```
+
+`whoami` requires a token; without one (or with an invalid one) it prints account-creation steps
+and exits non-zero — so a brand-new user is told to create a free account before anything runs.
 
 Handoff links are valid for 24 hours.
 

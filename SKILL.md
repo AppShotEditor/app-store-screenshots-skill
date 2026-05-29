@@ -21,16 +21,26 @@ valid layout DSL, create the handoff).
 
 ## Prerequisites
 
-- **`APPSHOTEDITOR_TOKEN`** must be set. If it isn't, STOP and tell the user:
-  sign in at https://appshoteditor.com/account, generate an API token, then
-  `export APPSHOTEDITOR_TOKEN=ase_…`. Don't continue without it.
+- **A free appshoteditor.com account + an API token.** This is required before anything else.
+  If the user doesn't have an account yet, tell them:
+  1. Open https://appshoteditor.com/account and **sign in with Google** — this creates the account.
+  2. Generate an API token on that page.
+  3. `export APPSHOTEDITOR_TOKEN=ase_…`
+  Don't continue without it.
 - Node 22+. The CLI at `dist/appshot.mjs` (this skill's directory) is self-contained.
 - Local dev: set `APPSHOTEDITOR_URL=http://localhost:5173` to target a local server.
 
 ## Workflow
 
-### 1. Check the token
-If `APPSHOTEDITOR_TOKEN` is unset, stop and ask the user to set it (above).
+### 1. Verify the account/token FIRST — before any other work
+Run the pre-flight check before reading the codebase or touching screenshots:
+```
+node <skill-dir>/dist/appshot.mjs whoami
+```
+- **Success** prints the plan + storage used → continue.
+- **Failure** (no token, or `401`) means the user has no account or an invalid token. **STOP** and
+  walk them through creating a free account + token (see Prerequisites). Do not proceed — the later
+  steps will only fail at upload time after wasted effort.
 
 ### 2. Analyze the app → 5–10 benefits
 Read the app's source, README, and any store copy. Extract 5–10 concrete,
