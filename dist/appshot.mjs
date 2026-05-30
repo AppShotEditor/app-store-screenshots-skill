@@ -539,7 +539,7 @@ function authHeaders() {
     fail(`APPSHOTEDITOR_TOKEN is not set.
 ${ACCOUNT_HELP}`);
   }
-  return { Authorization: `Bearer ${TOKEN}` };
+  return { Authorization: `Bearer ${TOKEN}`, Origin: BASE };
 }
 async function whoami() {
   const headers = authHeaders();

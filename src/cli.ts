@@ -37,7 +37,10 @@ function authHeaders(): Record<string, string> {
 	if (!TOKEN) {
 		fail(`APPSHOTEDITOR_TOKEN is not set.\n${ACCOUNT_HELP}`);
 	}
-	return { Authorization: `Bearer ${TOKEN}` };
+	// Declare a same-origin request so SvelteKit's CSRF origin check accepts the
+	// multipart upload POST. The API is Bearer-token authed (not cookie-based), so
+	// it isn't CSRF-exposed; this just satisfies the framework's form-post guard.
+	return { Authorization: `Bearer ${TOKEN}`, Origin: BASE };
 }
 
 /**
