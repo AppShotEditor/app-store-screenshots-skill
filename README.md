@@ -38,7 +38,7 @@ skill's registered name):
 | opencode      | `~/.config/opencode/skills/appshot-screenshots` |
 
 ```bash
-git clone git@github.com:AppShotEditor/app-store-screenshots-skill.git \
+git clone https://github.com/AppShotEditor/app-store-screenshots-skill.git \
   ~/.claude/skills/appshot-screenshots
 ```
 
