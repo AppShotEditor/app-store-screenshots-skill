@@ -4,10 +4,10 @@
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/types.ts
+// node_modules/@appshoteditor/shot-dsl/src/types.ts
 var CURRENT_SCHEMA_VERSION = 2;
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/validate.ts
+// node_modules/@appshoteditor/shot-dsl/src/validate.ts
 var LAYER_TYPES = ["background", "text", "image", "device", "shape"];
 function isValidLayerJSON(data) {
   if (!data || typeof data !== "object") return false;
@@ -50,7 +50,7 @@ function validateTemplate(data) {
   return { valid: errors.length === 0, errors };
 }
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/builders.ts
+// node_modules/@appshoteditor/shot-dsl/src/builders.ts
 var DEFAULT_CANVAS_WIDTH = 280;
 var DEFAULT_CANVAS_HEIGHT = 600;
 function makeTextLayer(opts) {
@@ -107,7 +107,7 @@ function makeTemplate(opts) {
   };
 }
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/device-frames.ts
+// node_modules/@appshoteditor/shot-dsl/src/device-frames.ts
 var deviceFrames = [
   // -------------------------------------------------------------------------
   // iOS PHONES
@@ -383,7 +383,7 @@ function getDeviceFrame(id) {
   return deviceFrames.find((d) => d.id === id);
 }
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/frames.ts
+// node_modules/@appshoteditor/shot-dsl/src/frames.ts
 var DEFAULT_CANVAS_WIDTH2 = 280;
 var DEFAULT_CANVAS_HEIGHT2 = 600;
 function calculateDeviceScale(device, canvasWidth = DEFAULT_CANVAS_WIDTH2, canvasHeight = DEFAULT_CANVAS_HEIGHT2) {
@@ -485,7 +485,7 @@ function makeDeviceFrameLayers(opts) {
   return { screenshot, frame };
 }
 
-// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/compose.ts
+// node_modules/@appshoteditor/shot-dsl/src/compose.ts
 function canvasDimsForDevice(deviceId) {
   switch (getDeviceFrame(deviceId)?.category) {
     case "tablet":
