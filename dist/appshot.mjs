@@ -89,6 +89,7 @@ function makeScreen(opts) {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     canvasWidth: opts.canvasWidth ?? DEFAULT_CANVAS_WIDTH,
     canvasHeight: opts.canvasHeight ?? DEFAULT_CANVAS_HEIGHT,
+    deviceClass: opts.deviceClass,
     layers: opts.layers,
     background: opts.background
   };
@@ -382,6 +383,14 @@ var deviceFrames = [
 function getDeviceFrame(id) {
   return deviceFrames.find((d) => d.id === id);
 }
+function deviceClassForDeviceId(deviceId) {
+  const frame = getDeviceFrame(deviceId);
+  if (!frame) return null;
+  if (frame.platform === "ios") return frame.category === "tablet" ? "ipad_13" : "iphone_6_9";
+  if (frame.platform === "android") return "android_phone";
+  if (frame.platform === "macos" || frame.platform === "windows") return "macbook";
+  return null;
+}
 
 // node_modules/@appshoteditor/shot-dsl/src/frames.ts
 var DEFAULT_CANVAS_WIDTH2 = 280;
@@ -529,6 +538,9 @@ function composeTemplate(plan) {
       background: screen.background,
       canvasWidth,
       canvasHeight,
+      // Tag the device GROUP (multi-device) so a mixed plan lands as separate sidebar groups in
+      // the editor instead of relying on frame inference. Absent ⇒ editor infers it.
+      deviceClass: deviceClassForDeviceId(screen.deviceId) ?? void 0,
       layers: [screenshot, frame, headline]
     });
   });
