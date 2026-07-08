@@ -6,14 +6,15 @@ and returns an editable link you open in **[appshoteditor.com](https://appshoted
 fine-tune, then export at the exact sizes Apple and Google require.
 
 This is an [Agent Skill](https://docsalot.dev/blog/skill-md) (the open `SKILL.md` standard), so it
-works across compatible coding agents — **Claude Code, OpenAI Codex CLI, Gemini CLI, Cursor,
+works across compatible coding agents — **Claude Code, OpenAI Codex CLI, Cursor,
 opencode**, and others. The instructions load in any of them; the actual work is a self-contained
 Node CLI, so it runs anywhere there's a shell + Node.
 
 ## What it does
 
 1. Analyzes your app (source / README / store copy) → 5–10 benefit-driven headlines.
-2. Uploads your screenshots to your appshoteditor.com account (metered; 25 MB free tier).
+2. Uploads your screenshots (PNG/JPEG/WebP) to your appshoteditor.com account (metered;
+   25 MB free tier).
 3. Composes device-framed layouts deterministically (the bundled CLI does the mechanical work).
 4. Returns an editor link to fine-tune layers, copy, and backgrounds, then export.
 
@@ -48,7 +49,7 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 ## Contents
 
 - `SKILL.md` — the orchestration the agent reads.
-- `src/cli.ts` — CLI source (`upload`, `compose`, `publish`).
+- `src/cli.ts` — CLI source (`whoami`, `upload`, `compose`, `publish`).
 - `scripts/build.mjs` — esbuild config that produces the bundle.
 - `dist/appshot.mjs` — self-contained Node bundle (committed; what end users run).
 - `schema/plan.schema.json` — the compose-plan format.
@@ -60,10 +61,13 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 export APPSHOTEDITOR_URL=http://localhost:5173
 
 node dist/appshot.mjs whoami                  # verify token works; prints plan + storage (run first)
-node dist/appshot.mjs upload shots/*.png      # → { assets: [{ id, url, width, height }] }
+node dist/appshot.mjs upload shots/*.png      # → { assets: [{ id, url, width, height, filename }] }
 node dist/appshot.mjs compose plan.json       # prints the layout Template JSON (no upload)
-node dist/appshot.mjs publish plan.json        # → https://appshoteditor.com/app?import=<code>
+node dist/appshot.mjs publish plan.json       # → https://appshoteditor.com/app?import=<code>
 ```
+
+Uploads are resumable: files already stored (same filename + size) are skipped, and if a batch
+fails partway the CLI prints a partial manifest (`"partial": true`) — just re-run the same command.
 
 `whoami` requires a token; without one (or with an invalid one) it prints account-creation steps
 and exits non-zero — so a brand-new user is told to create a free account before anything runs.
