@@ -77,8 +77,12 @@ palette). Write `plan.json` per `schema/plan.schema.json`:
   ]
 }
 ```
-Common `deviceId`s: `iphone_16_pro`, `iphone_16_pro_max`, `iphone_16`,
-`pixel_9_pro`, `ipad_pro_13_m4`, `macbook_pro_14`. Match the screenshot's aspect ratio.
+Common `deviceId`s: `iphone_17_pro`, `iphone_17_pro_max`, `iphone_air`,
+`pixel_9_pro_xl`, `ipad_pro_13_m4`, `macbook_pro_14`. Match the screenshot's aspect
+ratio. For the full current list (older iPhone sizes, more iPad/Mac variants,
+`_menu_bar` laptop framings, desktops), read the `id` fields in
+`node_modules/@appshoteditor/shot-dsl/src/device-frames.ts` (bundled with this
+skill) — there's no CLI command that lists them.
 
 ### 6. Publish the handoff
 ```
