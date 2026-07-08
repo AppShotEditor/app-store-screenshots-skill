@@ -48,7 +48,7 @@ user-facing benefits — outcomes ("Track spending automatically"), not features
 ("uses SQLite"). Each becomes a screenshot headline.
 
 ### 3. Collect the screenshots
-Ask the user for a folder of simulator/device screenshots (PNG/JPEG). Review them
+Ask the user for a folder of simulator/device screenshots (PNG/JPEG/WebP). Review them
 and note what each shows, so you can pair it with the right benefit.
 
 ### 4. Upload
@@ -56,7 +56,9 @@ and note what each shows, so you can pair it with the right benefit.
 node <skill-dir>/dist/appshot.mjs upload path/to/shots/*.png
 ```
 Prints `{ assets: [{ id, url, width, height, filename }] }`. Use each asset's `url`
-and `width`/`height` in the plan.
+and `width`/`height` in the plan. Re-running after a mid-batch failure is safe:
+files already uploaded (same filename + size) are skipped, and a failed run still
+prints a partial manifest (`"partial": true`) for the files that made it.
 
 ### 5. Pair benefits ↔ screenshots → write plan.json
 Choose 5–8 screens. For each: a `headline` (from a benefit), a `deviceId` matching

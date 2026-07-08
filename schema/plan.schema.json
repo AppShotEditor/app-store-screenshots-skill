@@ -7,8 +7,14 @@
   "additionalProperties": false,
   "properties": {
     "name": { "type": "string", "description": "Project name (usually the app name)." },
-    "canvasWidth": { "type": "number", "default": 280 },
-    "canvasHeight": { "type": "number", "default": 600 },
+    "canvasWidth": {
+      "type": "number",
+      "description": "OMIT unless every screen uses the same device. When omitted, each screen gets its device's native canvas size (per-device sizing). Setting this forces ONE canvas size across ALL screens — a mixed-device plan would squeeze e.g. iPad screens into a phone-sized canvas."
+    },
+    "canvasHeight": {
+      "type": "number",
+      "description": "See canvasWidth — omit unless the plan is single-device."
+    },
     "screens": {
       "type": "array",
       "minItems": 1,

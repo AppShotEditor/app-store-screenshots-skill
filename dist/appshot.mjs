@@ -593,6 +593,20 @@ function imageSize(buf) {
   if (buf.length >= 24 && buf[0] === 137 && buf.toString("ascii", 1, 4) === "PNG") {
     return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
   }
+  if (buf.length >= 30 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") {
+    const fourCC = buf.toString("ascii", 12, 16);
+    if (fourCC === "VP8X") {
+      return { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) };
+    }
+    if (fourCC === "VP8 " && buf[23] === 157 && buf[24] === 1 && buf[25] === 42) {
+      return { width: buf.readUInt16LE(26) & 16383, height: buf.readUInt16LE(28) & 16383 };
+    }
+    if (fourCC === "VP8L" && buf[20] === 47) {
+      const bits = buf.readUInt32LE(21);
+      return { width: (bits & 16383) + 1, height: (bits >> 14 & 16383) + 1 };
+    }
+    return null;
+  }
   if (buf.length >= 4 && buf[0] === 255 && buf[1] === 216) {
     let off = 2;
     while (off + 9 < buf.length) {
@@ -611,24 +625,96 @@ function imageSize(buf) {
   }
   return null;
 }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+var MAX_429_RETRIES = 3;
+async function postWithRetry(url, init) {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 || attempt > MAX_429_RETRIES) return res;
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const waitSeconds = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5, 60);
+    console.error(`appshot: rate limited (429) \u2014 waiting ${waitSeconds}s (retry ${attempt}/${MAX_429_RETRIES})`);
+    await sleep(waitSeconds * 1e3);
+  }
+}
+function mb(bytes) {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+function explainUploadError(file, status, bodyText) {
+  let body = {};
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+  }
+  switch (body.error) {
+    case "file_too_large":
+      return `${file} exceeds the 15 MB per-file limit \u2014 export a smaller image. (This is not a storage-quota problem.)`;
+    case "quota_exceeded": {
+      const used = body.usedBytes != null ? `${mb(body.usedBytes)} MB used` : "quota full";
+      const quota = body.quotaBytes != null ? ` of ${mb(body.quotaBytes)} MB` : "";
+      return `storage quota exceeded uploading ${file} (${used}${quota}). Delete unused screenshots at ${BASE}/account or upgrade your plan.`;
+    }
+    case "unsupported_type":
+      return `${file}: unsupported image type \u2014 use PNG, JPEG, or WebP.`;
+    case "rate_limited":
+      return `rate limited uploading ${file} and retries were exhausted \u2014 wait a minute and re-run (already-uploaded files are skipped automatically).`;
+    default:
+      return `upload failed for ${file}: ${status} ${bodyText}`;
+  }
+}
 async function upload(files) {
   if (files.length === 0) fail("upload: provide one or more image files");
   const headers = authHeaders();
+  const existingByKey = /* @__PURE__ */ new Map();
+  const listRes = await fetch(`${BASE}/api/screenshots`, { headers });
+  if (listRes.ok) {
+    const { assets: existing } = await listRes.json();
+    for (const asset of existing) {
+      if (asset.filename) existingByKey.set(`${asset.filename}\0${asset.byteSize}`, asset);
+    }
+  } else {
+    console.error(
+      `appshot: warning \u2014 could not check existing uploads (${listRes.status}); duplicates may be re-uploaded`
+    );
+  }
   const assets = [];
+  const flushPartialManifest = () => {
+    if (assets.length === 0) return;
+    console.error(
+      `appshot: ${assets.length}/${files.length} files are already stored \u2014 partial manifest below; re-running the same command skips them.`
+    );
+    console.log(JSON.stringify({ assets, partial: true }, null, 2));
+  };
   for (const file of files) {
+    const name = basename(file);
     const buf = readFileSync(file);
+    const already = existingByKey.get(`${name}\0${buf.length}`);
+    if (already) {
+      console.error(`appshot: skipping ${name} \u2014 already uploaded (same filename + size)`);
+      assets.push({ ...already, filename: name });
+      continue;
+    }
     const dims = imageSize(buf);
+    if (!dims) {
+      console.error(
+        `appshot: warning \u2014 could not read dimensions from ${name}; fill in screenshot.width/height in the plan manually.`
+      );
+    }
     const form = new FormData();
-    form.append("file", new Blob([buf], { type: contentType(file) }), basename(file));
+    form.append("file", new Blob([buf], { type: contentType(file) }), name);
     if (dims) {
       form.append("width", String(dims.width));
       form.append("height", String(dims.height));
     }
-    const res = await fetch(`${BASE}/api/screenshots`, { method: "POST", headers, body: form });
-    if (res.status === 413) fail(`storage quota exceeded uploading ${file}`);
-    if (!res.ok) fail(`upload failed for ${file}: ${res.status} ${await res.text()}`);
+    const res = await postWithRetry(`${BASE}/api/screenshots`, { method: "POST", headers, body: form });
+    if (!res.ok) {
+      flushPartialManifest();
+      fail(explainUploadError(file, res.status, await res.text()));
+    }
     const { asset } = await res.json();
-    assets.push({ ...asset, filename: basename(file) });
+    assets.push({ ...asset, filename: name });
   }
   console.log(JSON.stringify({ assets }, null, 2));
 }
