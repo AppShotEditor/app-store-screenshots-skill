@@ -80,9 +80,10 @@ palette). Write `plan.json` per `schema/plan.schema.json`:
 Common `deviceId`s: `iphone_17_pro`, `iphone_17_pro_max`, `iphone_air`,
 `pixel_9_pro_xl`, `ipad_pro_13_m4`, `macbook_pro_14`. Match the screenshot's aspect
 ratio. For the full current list (older iPhone sizes, more iPad/Mac variants,
-`_menu_bar` laptop framings, desktops), read the `id` fields in
-`node_modules/@appshoteditor/shot-dsl/src/device-frames.ts` (bundled with this
-skill) — there's no CLI command that lists them.
+`_menu_bar` laptop framings, desktops), read the `id` fields in the shot-dsl source:
+<https://unpkg.com/@appshoteditor/shot-dsl@0.1.2/src/device-frames.ts> (or locally at
+`node_modules/@appshoteditor/shot-dsl/src/device-frames.ts` if you've run
+`npm install` in the skill directory) — there's no CLI command that lists them.
 
 ### 6. Publish the handoff
 ```
