@@ -142,7 +142,12 @@ function sleep(ms: number): Promise<void> {
 
 const MAX_RETRIES = 3;
 /** Per-attempt request timeout; a timeout counts as a (retryable) network error. */
-const FETCH_TIMEOUT_MS = Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) > 0 ? Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) : 30_000;
+const TIMEOUT_OVERRIDE_MS = Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) > 0 ? Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) : 0;
+const FETCH_TIMEOUT_MS = TIMEOUT_OVERRIDE_MS || 30_000;
+/** Upload timeout: the body must be SENT before headers arrive, so allow for a slow uplink (~0.5 Mbit/s). */
+function uploadTimeoutMs(bytes: number): number {
+	return TIMEOUT_OVERRIDE_MS || 30_000 + Math.ceil(bytes / 62_500) * 1000;
+}
 const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
 
 /**
@@ -151,17 +156,17 @@ const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
  * that gets no response within FETCH_TIMEOUT_MS (exponential backoff 1 s, 2 s, 4 s). A network error
  * that survives the retries is thrown as a plain Error message.
  */
-async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function postWithRetry(url: string, init: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
 	for (let attempt = 1; ; attempt++) {
 		let res: Response;
 		// A ref'd timer (AbortSignal.timeout's is unref'd and wouldn't keep a hung process alive to retry).
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(new DOMException('request timed out', 'TimeoutError')), FETCH_TIMEOUT_MS);
+		const timer = setTimeout(() => controller.abort(new DOMException('request timed out', 'TimeoutError')), timeoutMs);
 		try {
 			res = await fetch(url, { ...init, signal: controller.signal });
 		} catch (err) {
 			const e = err as Error;
-			const reason = e?.name === 'TimeoutError' ? `no response within ${FETCH_TIMEOUT_MS / 1000}s` : e?.message || String(err);
+			const reason = e?.name === 'TimeoutError' ? `no response within ${Math.round(timeoutMs / 1000)}s (set APPSHOTEDITOR_TIMEOUT_MS to allow longer)` : e?.message || String(err);
 			if (attempt > MAX_RETRIES) throw new Error(`network error talking to ${BASE}: ${reason}`);
 			const wait = 2 ** (attempt - 1);
 			console.error(`appshot: network error (${reason}) — retrying in ${wait}s (retry ${attempt}/${MAX_RETRIES})`);
@@ -272,7 +277,7 @@ async function upload(files: string[]): Promise<void> {
 			form.append('width', String(dims.width));
 			form.append('height', String(dims.height));
 		}
-		const res = await postWithRetry(`${BASE}/api/screenshots`, { method: 'POST', headers, body: form });
+		const res = await postWithRetry(`${BASE}/api/screenshots`, { method: 'POST', headers, body: form }, uploadTimeoutMs(buf.length));
 		if (!res.ok) {
 			flushPartialManifest();
 			fail(explainUploadError(file, res.status, await res.text()));
