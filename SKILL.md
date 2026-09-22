@@ -48,7 +48,7 @@ user-facing benefits — outcomes ("Track spending automatically"), not features
 ("uses SQLite"). Each becomes a screenshot headline.
 
 ### 3. Propose a shot list — BEFORE collecting screenshots
-Great store screenshots are staged, not grabbed. Turn the strongest 5–8 benefits into a
+Great store screenshots are staged, not grabbed. Turn the strongest 5–10 benefits (the App Store allows up to 10 screenshots) into a
 **shot list**: for each screen, the exact app **state** to capture plus its caption. Present it
 to the user as a table and ask them to capture (or confirm) each shot.
 
@@ -95,7 +95,7 @@ files already uploaded (same filename + size) are skipped, and a failed run stil
 prints a partial manifest (`"partial": true`) for the files that made it.
 
 ### 6. Pair shots ↔ screenshots → write plan.json
-One screen per shot-list entry (5–8). For each:
+One screen per shot-list entry (5–10). For each:
 - `headline` — the caption. **Short (≈2–6 words), benefit-led, 2 lines max.** It renders
   large and bold (~8.5% of the canvas width); longer copy gets auto-shrunk and reads worse. Lead
   with the outcome ("Hear the word. Spell it."), not the feature ("Text-to-speech engine").
