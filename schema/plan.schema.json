@@ -9,11 +9,11 @@
     "name": { "type": "string", "description": "Project name (usually the app name)." },
     "canvasWidth": {
       "type": "number",
-      "description": "OMIT unless every screen uses the same device. When omitted, each screen gets its device's native canvas size (per-device sizing). Setting this forces ONE canvas size across ALL screens — a mixed-device plan would squeeze e.g. iPad screens into a phone-sized canvas."
+      "description": "Usually OMIT (recommended). When omitted, each screen gets its device class's canvas (phone 280×608, tablet 450×600, laptop 608×380 editor units) and the editor exports at the real App Store sizes — the layout is identical either way because every layer is sized proportionally to the canvas. Only set this (together with canvasHeight) if you have a specific reason to pin one canvas size, and only for a single-device plan: it forces ONE size across ALL screens, so a mixed-device plan would squeeze e.g. iPad screens into a phone-shaped canvas."
     },
     "canvasHeight": {
       "type": "number",
-      "description": "See canvasWidth — omit unless the plan is single-device."
+      "description": "See canvasWidth — usually omit; if set, set both, and only for a single-device plan."
     },
     "screens": {
       "type": "array",
@@ -23,8 +23,24 @@
         "required": ["headline", "background", "deviceId", "screenshot"],
         "additionalProperties": false,
         "properties": {
-          "headline": { "type": "string", "description": "Short benefit-driven headline." },
+          "headline": {
+            "type": "string",
+            "description": "Short, benefit-led headline: ≈2–6 words, 2 lines max (e.g. \"Hear the word. Spell it.\"). Rendered large and bold (~8.5% of canvas width); longer copy is auto-shrunk and looks worse."
+          },
           "headlineColor": { "type": "string", "description": "Hex color, defaults to #ffffff." },
+          "subheadline": {
+            "type": "string",
+            "description": "Optional short supporting line under the headline (one short sentence, ≲8 words). Rendered at ~55% of the headline size, slightly muted. Omit when the headline says it all."
+          },
+          "subheadlineColor": {
+            "type": "string",
+            "description": "Hex color for the subheadline. Defaults to headlineColor at 85% opacity."
+          },
+          "layout": {
+            "enum": ["text-top", "text-bottom", "device-bleed"],
+            "default": "text-top",
+            "description": "text-top (default): text above, device below bleeding off the bottom edge. text-bottom: device at the top bleeding off the TOP edge, text below it. device-bleed: text on top, an oversized device (~95% of width) bleeding heavily off the bottom — a hero look."
+          },
           "deviceId": {
             "type": "string",
             "description": "Device frame id (e.g. iphone_16_pro, pixel_9_pro, ipad_pro_13_m4)."
@@ -67,5 +83,9 @@
         }
       }
     }
+  },
+  "dependencies": {
+    "canvasWidth": ["canvasHeight"],
+    "canvasHeight": ["canvasWidth"]
   }
 }

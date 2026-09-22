@@ -12,7 +12,9 @@ Node CLI, so it runs anywhere there's a shell + Node.
 
 ## What it does
 
-1. Analyzes your app (source / README / store copy) → 5–10 benefit-driven headlines.
+1. Analyzes your app (source / README / store copy) → 5–10 benefit-driven headlines, then proposes
+   a **shot list** — the exact app state to capture for each screen — and checks your captures for
+   empty states and system dialogs before using them.
 2. Uploads your screenshots (PNG/JPEG/WebP) to your appshoteditor.com account (metered;
    25 MB free tier).
 3. Composes device-framed layouts deterministically (the bundled CLI does the mechanical work).
@@ -52,7 +54,44 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 - `src/cli.ts` — CLI source (`whoami`, `upload`, `compose`, `publish`).
 - `scripts/build.mjs` — esbuild config that produces the bundle.
 - `dist/appshot.mjs` — self-contained Node bundle (committed; what end users run).
-- `schema/plan.schema.json` — the compose-plan format.
+- `schema/plan.schema.json` — the compose-plan format (see below).
+
+## Plan format
+
+`compose` / `publish` take a `plan.json` (JSON Schema: `schema/plan.schema.json`):
+
+```json
+{
+  "name": "My App",
+  "screens": [
+    {
+      "headline": "Hear the word. Spell it.",
+      "subheadline": "Words read aloud, answers checked instantly",
+      "layout": "text-top",
+      "headlineColor": "#ffffff",
+      "background": { "type": "solid", "color": "#2E6FD8" },
+      "deviceId": "iphone_17_pro_max",
+      "screenshot": { "url": "<asset url from upload>", "width": 1320, "height": 2868 }
+    }
+  ]
+}
+```
+
+| Screen field | Required | Notes |
+| --- | --- | --- |
+| `headline` | yes | ≈2–6 words, benefit-led, 2 lines max. Rendered bold at ~8.5% of canvas width. |
+| `subheadline` | no | One short supporting line, ~55% of the headline size, slightly muted. |
+| `headlineColor` / `subheadlineColor` | no | Hex. Headline defaults to `#ffffff`; subheadline defaults to the headline color at 85% opacity. |
+| `layout` | no | `text-top` (default; device below, bleeding off the bottom), `text-bottom` (device bleeds off the top, text below), `device-bleed` (oversized ~95%-width device bleeding heavily off the bottom). |
+| `deviceId` | yes | Device frame id, e.g. `iphone_17_pro_max`, `pixel_9_pro_xl`, `ipad_pro_13_m4`, `macbook_pro_14`. |
+| `screenshot` | yes | `{ url, width, height }` from the upload manifest. |
+| `background` | yes | `{ type: "solid", color }` or `{ type: "gradient", gradient: { type, colorStops } }`. |
+
+Plan-level `canvasWidth` / `canvasHeight` are optional and **best omitted**: each screen then gets its
+device's canvas and the editor exports at App Store sizes. All geometry (device size, font sizes,
+padding) is proportional to the canvas, so pinning native pixels (e.g. 1320×2868) produces the same
+layout. If you do set them, set both, and only in a single-device plan. The CLI validates plans and
+reports every problem at once.
 
 ## CLI (used by the skill)
 
@@ -85,3 +124,12 @@ The layout DSL + device geometry come from
 [`@appshoteditor/shot-dsl`](https://www.npmjs.com/package/@appshoteditor/shot-dsl) on npm — the same
 package the editor uses, so a layout composed here renders identically there. Bump the dep + rebuild
 whenever the DSL changes. The DSL `schemaVersion` is the compatibility contract.
+
+To bundle an **unpublished** local checkout of the DSL instead of the npm copy (package.json is left
+alone), point `SHOT_DSL_PATH` at the package directory:
+
+```bash
+SHOT_DSL_PATH=../app-shot-editor/packages/shot-dsl npm run build
+```
+
+The bundle's second line records which DSL version (and whether local source) it was built from.

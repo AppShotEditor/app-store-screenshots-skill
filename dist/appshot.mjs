@@ -1,13 +1,14 @@
 #!/usr/bin/env node
+// @appshoteditor/shot-dsl 0.2.0 (local source)
 
 // src/cli.ts
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 
-// node_modules/@appshoteditor/shot-dsl/src/types.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/types.ts
 var CURRENT_SCHEMA_VERSION = 2;
 
-// node_modules/@appshoteditor/shot-dsl/src/validate.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/validate.ts
 var LAYER_TYPES = ["background", "text", "image", "device", "shape"];
 function isValidLayerJSON(data) {
   if (!data || typeof data !== "object") return false;
@@ -50,7 +51,7 @@ function validateTemplate(data) {
   return { valid: errors.length === 0, errors };
 }
 
-// node_modules/@appshoteditor/shot-dsl/src/builders.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/builders.ts
 var DEFAULT_CANVAS_WIDTH = 280;
 var DEFAULT_CANVAS_HEIGHT = 600;
 function makeTextLayer(opts) {
@@ -108,7 +109,7 @@ function makeTemplate(opts) {
   };
 }
 
-// node_modules/@appshoteditor/shot-dsl/src/device-frames.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/device-frames.ts
 var deviceFrames = [
   // -------------------------------------------------------------------------
   // iOS PHONES
@@ -392,7 +393,7 @@ function deviceClassForDeviceId(deviceId) {
   return null;
 }
 
-// node_modules/@appshoteditor/shot-dsl/src/frames.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/frames.ts
 var DEFAULT_CANVAS_WIDTH2 = 280;
 var DEFAULT_CANVAS_HEIGHT2 = 600;
 function calculateDeviceScale(device, canvasWidth = DEFAULT_CANVAS_WIDTH2, canvasHeight = DEFAULT_CANVAS_HEIGHT2) {
@@ -494,7 +495,7 @@ function makeDeviceFrameLayers(opts) {
   return { screenshot, frame };
 }
 
-// node_modules/@appshoteditor/shot-dsl/src/compose.ts
+// ../../../Projects/Furvur/app-shot-editor/packages/shot-dsl/src/compose.ts
 function canvasDimsForDevice(deviceId) {
   switch (getDeviceFrame(deviceId)?.category) {
     case "tablet":
@@ -507,41 +508,137 @@ function canvasDimsForDevice(deviceId) {
       return { width: 280, height: 608 };
   }
 }
+var COMPOSE_LAYOUTS = ["text-top", "text-bottom", "device-bleed"];
+var TYPE_UNIT_HEIGHT_CAP = 0.55;
+var HEADLINE_SIZE = 0.085;
+var HEADLINE_SIZE_LONG = 0.072;
+var HEADLINE_LINE_HEIGHT = 1.1;
+var SUBHEADLINE_RATIO = 0.55;
+var SUBHEADLINE_LINE_HEIGHT = 1.25;
+var SUBHEADLINE_OPACITY = 0.85;
+var TEXT_WIDTH = 0.84;
+var AVG_CHAR_WIDTH = 0.58;
+var EDGE_MARGIN = 0.055;
+var TEXT_GAP = 0.3;
+var DEVICE_GAP = 0.04;
+var LAYOUTS = {
+  "text-top": { deviceWidth: 0.86, maxBleed: 0.2, minDeviceTop: 0 },
+  "text-bottom": { deviceWidth: 0.9, maxBleed: 0.2, minDeviceTop: 0 },
+  "device-bleed": { deviceWidth: 0.95, maxBleed: 0.4, minDeviceTop: 0.28 }
+};
+function estimateLines(text, fontSize, width) {
+  const maxChars = Math.max(1, Math.floor(width / (fontSize * AVG_CHAR_WIDTH)));
+  let lines = 0;
+  for (const paragraph of text.split("\n")) {
+    let current = 0;
+    lines++;
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const len = word.length;
+      if (current === 0) {
+        current = len;
+      } else if (current + 1 + len <= maxChars) {
+        current += 1 + len;
+      } else {
+        lines++;
+        current = len;
+      }
+      while (current > maxChars) {
+        lines++;
+        current -= maxChars;
+      }
+    }
+  }
+  return Math.max(1, lines);
+}
+function measureTextBlock(screen, unit, textWidth) {
+  let headlineSize = unit * HEADLINE_SIZE;
+  if (estimateLines(screen.headline, headlineSize, textWidth) > 2) headlineSize = unit * HEADLINE_SIZE_LONG;
+  const headlineHeight = estimateLines(screen.headline, headlineSize, textWidth) * headlineSize * HEADLINE_LINE_HEIGHT;
+  const hasSub = !!screen.subheadline?.trim();
+  const subSize = headlineSize * SUBHEADLINE_RATIO;
+  const subHeight = hasSub ? estimateLines(screen.subheadline, subSize, textWidth) * subSize * SUBHEADLINE_LINE_HEIGHT : 0;
+  const gap = hasSub ? headlineSize * TEXT_GAP : 0;
+  return { headlineSize, headlineHeight, subSize, subHeight, gap, height: headlineHeight + gap + subHeight };
+}
 function composeTemplate(plan) {
   const screens = plan.screens.map((screen) => {
     const explicit = plan.canvasWidth != null || plan.canvasHeight != null;
-    const { width: canvasWidth, height: canvasHeight } = explicit ? { width: plan.canvasWidth ?? 280, height: plan.canvasHeight ?? 600 } : canvasDimsForDevice(screen.deviceId);
+    const { width: W, height: H } = explicit ? { width: plan.canvasWidth ?? 280, height: plan.canvasHeight ?? 600 } : canvasDimsForDevice(screen.deviceId);
+    const layout = screen.layout ?? "text-top";
+    const spec = LAYOUTS[layout] ?? LAYOUTS["text-top"];
+    const unit = Math.min(W, H * TYPE_UNIT_HEIGHT_CAP);
+    const textWidth = W * TEXT_WIDTH;
+    const margin = H * EDGE_MARGIN;
+    const deviceGap = unit * DEVICE_GAP;
+    const block = measureTextBlock(screen, unit, textWidth);
+    const blockTop = layout === "text-bottom" ? H - margin - block.height : margin;
+    const device = getDeviceFrame(screen.deviceId);
+    if (!device) throw new Error(`Unknown device: ${screen.deviceId}`);
+    const { width: fw, height: fh } = device.imageDimensions;
+    let scale;
+    let centerY;
+    if (layout === "text-bottom") {
+      const deviceBottom = blockTop - deviceGap;
+      scale = Math.min(W * spec.deviceWidth / fw, deviceBottom / (1 - spec.maxBleed) / fh);
+      centerY = deviceBottom - fh * scale / 2;
+    } else {
+      const deviceTop = Math.max(margin + block.height + deviceGap, H * spec.minDeviceTop);
+      scale = Math.min(W * spec.deviceWidth / fw, (H - deviceTop) / (1 - spec.maxBleed) / fh);
+      centerY = deviceTop + fh * scale / 2;
+    }
     const { screenshot, frame } = makeDeviceFrameLayers({
       deviceId: screen.deviceId,
       screenshotUrl: screen.screenshot.url,
       screenshotWidth: screen.screenshot.width,
       screenshotHeight: screen.screenshot.height,
-      canvasWidth,
-      canvasHeight,
-      centerY: canvasHeight * 0.6
-      // sit the device lower, leaving room for the headline
+      canvasWidth: W,
+      canvasHeight: H,
+      centerX: W / 2,
+      centerY,
+      scale
     });
+    const headlineColor = screen.headlineColor ?? "#ffffff";
     const headline = makeTextLayer({
       text: screen.headline,
-      left: canvasWidth / 2,
-      top: canvasHeight * 0.12,
-      width: canvasWidth * 0.84,
-      fontSize: 26,
+      left: W / 2,
+      top: blockTop + block.headlineHeight / 2,
+      width: textWidth,
+      fontSize: block.headlineSize,
       fontWeight: "800",
-      fill: screen.headlineColor ?? "#ffffff",
+      lineHeight: HEADLINE_LINE_HEIGHT,
+      fill: headlineColor,
       textAlign: "center",
       name: "Headline",
       templateRole: "editable",
       templateKey: "headline"
     });
+    const layers = [screenshot, frame, headline];
+    if (screen.subheadline?.trim()) {
+      const sub = makeTextLayer({
+        text: screen.subheadline,
+        left: W / 2,
+        top: blockTop + block.headlineHeight + block.gap + block.subHeight / 2,
+        width: textWidth,
+        fontSize: block.subSize,
+        fontWeight: "500",
+        lineHeight: SUBHEADLINE_LINE_HEIGHT,
+        fill: screen.subheadlineColor ?? headlineColor,
+        textAlign: "center",
+        name: "Subheadline",
+        templateRole: "editable",
+        templateKey: "subheadline"
+      });
+      if (!screen.subheadlineColor) sub.fabricData.opacity = SUBHEADLINE_OPACITY;
+      layers.push(sub);
+    }
     return makeScreen({
       background: screen.background,
-      canvasWidth,
-      canvasHeight,
+      canvasWidth: W,
+      canvasHeight: H,
       // Tag the device GROUP (multi-device) so a mixed plan lands as separate sidebar groups in
       // the editor instead of relying on frame inference. Absent ⇒ editor infers it.
       deviceClass: deviceClassForDeviceId(screen.deviceId) ?? void 0,
-      layers: [screenshot, frame, headline]
+      layers
     });
   });
   return makeTemplate({ name: plan.name, screens, tags: ["generated"] });
@@ -718,9 +815,84 @@ async function upload(files) {
   }
   console.log(JSON.stringify({ assets }, null, 2));
 }
+var SCREEN_KEYS = /* @__PURE__ */ new Set([
+  "headline",
+  "headlineColor",
+  "subheadline",
+  "subheadlineColor",
+  "layout",
+  "background",
+  "deviceId",
+  "screenshot"
+]);
+var PLAN_KEYS = /* @__PURE__ */ new Set(["name", "screens", "canvasWidth", "canvasHeight"]);
+function validatePlan(plan) {
+  const errors = [];
+  const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  const optString = (v, at) => {
+    if (v !== void 0 && typeof v !== "string") errors.push(`${at} must be a string`);
+  };
+  const posNumber = (v, at) => {
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) errors.push(`${at} must be a positive number`);
+  };
+  if (!isObj(plan)) return ["plan must be a JSON object"];
+  for (const key of Object.keys(plan)) if (!PLAN_KEYS.has(key)) errors.push(`unknown plan field "${key}"`);
+  if (typeof plan.name !== "string" || !plan.name) errors.push("name must be a non-empty string");
+  if (plan.canvasWidth !== void 0) posNumber(plan.canvasWidth, "canvasWidth");
+  if (plan.canvasHeight !== void 0) posNumber(plan.canvasHeight, "canvasHeight");
+  if (plan.canvasWidth === void 0 !== (plan.canvasHeight === void 0)) {
+    errors.push("set both canvasWidth and canvasHeight, or (recommended) omit both");
+  }
+  if (!Array.isArray(plan.screens) || plan.screens.length === 0) {
+    errors.push("screens must be a non-empty array");
+    return errors;
+  }
+  plan.screens.forEach((screen, i) => {
+    const at = `screens[${i}]`;
+    if (!isObj(screen)) {
+      errors.push(`${at} must be an object`);
+      return;
+    }
+    for (const key of Object.keys(screen)) if (!SCREEN_KEYS.has(key)) errors.push(`${at}: unknown field "${key}"`);
+    if (typeof screen.headline !== "string" || !screen.headline.trim()) {
+      errors.push(`${at}.headline must be a non-empty string`);
+    }
+    optString(screen.headlineColor, `${at}.headlineColor`);
+    optString(screen.subheadline, `${at}.subheadline`);
+    optString(screen.subheadlineColor, `${at}.subheadlineColor`);
+    if (screen.layout !== void 0 && !COMPOSE_LAYOUTS.includes(screen.layout)) {
+      errors.push(`${at}.layout must be one of ${COMPOSE_LAYOUTS.join(", ")} (got ${JSON.stringify(screen.layout)})`);
+    }
+    if (typeof screen.deviceId !== "string" || !getDeviceFrame(screen.deviceId)) {
+      errors.push(`${at}.deviceId ${JSON.stringify(screen.deviceId)} is not a known device id`);
+    }
+    if (!isObj(screen.screenshot)) {
+      errors.push(`${at}.screenshot must be an object { url, width, height }`);
+    } else {
+      if (typeof screen.screenshot.url !== "string" || !screen.screenshot.url) {
+        errors.push(`${at}.screenshot.url must be a non-empty string`);
+      }
+      posNumber(screen.screenshot.width, `${at}.screenshot.width`);
+      posNumber(screen.screenshot.height, `${at}.screenshot.height`);
+    }
+    if (!isObj(screen.background) || !["solid", "gradient"].includes(screen.background.type)) {
+      errors.push(`${at}.background.type must be "solid" or "gradient"`);
+    }
+  });
+  return errors;
+}
 function readPlan(path) {
   if (!path) fail("expected a plan.json path");
-  return JSON.parse(readFileSync(path, "utf8"));
+  let plan;
+  try {
+    plan = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    fail(`could not read ${path}: ${err.message}`);
+  }
+  const errors = validatePlan(plan);
+  if (errors.length) fail(`invalid plan (${path}):
+  - ${errors.join("\n  - ")}`);
+  return plan;
 }
 function buildTemplate(plan) {
   const template = composeTemplate(plan);
