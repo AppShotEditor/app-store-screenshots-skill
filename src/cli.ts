@@ -141,25 +141,34 @@ function sleep(ms: number): Promise<void> {
 }
 
 const MAX_RETRIES = 3;
+/** Per-attempt request timeout; a timeout counts as a (retryable) network error. */
+const FETCH_TIMEOUT_MS = Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) > 0 ? Number(process.env.APPSHOTEDITOR_TIMEOUT_MS) : 30_000;
 const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
 
 /**
  * POST with automatic retry (up to MAX_RETRIES) on transient failures: 429 (honouring Retry-After,
- * each wait capped at 60 s), 5xx gateway/server errors and network errors (exponential backoff
- * 1 s, 2 s, 4 s). A network error that survives the retries is thrown as a plain Error message.
+ * each wait capped at 60 s), 5xx gateway/server errors and network errors — including a request
+ * that gets no response within FETCH_TIMEOUT_MS (exponential backoff 1 s, 2 s, 4 s). A network error
+ * that survives the retries is thrown as a plain Error message.
  */
 async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
 	for (let attempt = 1; ; attempt++) {
 		let res: Response;
+		// A ref'd timer (AbortSignal.timeout's is unref'd and wouldn't keep a hung process alive to retry).
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(new DOMException('request timed out', 'TimeoutError')), FETCH_TIMEOUT_MS);
 		try {
-			res = await fetch(url, init);
+			res = await fetch(url, { ...init, signal: controller.signal });
 		} catch (err) {
-			const reason = (err as Error)?.message || String(err);
+			const e = err as Error;
+			const reason = e?.name === 'TimeoutError' ? `no response within ${FETCH_TIMEOUT_MS / 1000}s` : e?.message || String(err);
 			if (attempt > MAX_RETRIES) throw new Error(`network error talking to ${BASE}: ${reason}`);
 			const wait = 2 ** (attempt - 1);
 			console.error(`appshot: network error (${reason}) — retrying in ${wait}s (retry ${attempt}/${MAX_RETRIES})`);
 			await sleep(wait * 1000);
 			continue;
+		} finally {
+			clearTimeout(timer);
 		}
 		if (!TRANSIENT_STATUS.has(res.status) || attempt > MAX_RETRIES) return res;
 		let waitSeconds = 2 ** (attempt - 1);
@@ -532,6 +541,7 @@ function parseArgs(argv: string[]): {
 			const list = argv[++i];
 			if (!list) fail('--only needs a comma-separated list, e.g. --only B,C');
 			only = list.split(',').map((k) => k.trim().toUpperCase()).filter(Boolean);
+			if (only.length === 0) fail('--only needs at least one concept, e.g. --only B,C');
 		} else if (a.startsWith('--')) fail(`unknown flag ${a}`);
 		else positional.push(a);
 	}
@@ -599,6 +609,11 @@ function variants(argv: string[]): void {
 	}
 }
 
+/** POSIX-shell-quote a path for a copy-pasteable command (plain paths stay unquoted). */
+function shellQuote(value: string): string {
+	return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 type HandoffResult = { ok: true; url: string } | { ok: false; error: string };
 
 async function postHandoff(template: unknown): Promise<HandoffResult> {
@@ -662,8 +677,8 @@ async function publish(argv: string[]): Promise<void> {
 		const done = jobs.filter((j) => !failed.includes(j)).map((j) => j.label);
 		console.error(`appshot: published ${done.length ? done.join(', ') : 'nothing'}; NOT published: ${failed.map((j) => j.label).join(', ')}`);
 		const retry = asVariants
-			? `appshot publish --variants ${positional[0]} --only ${failed.map((j) => j.key).join(',')}`
-			: `appshot publish ${failed.map((j) => j.key).join(' ')}`;
+			? `appshot publish --variants ${shellQuote(positional[0])} --only ${failed.map((j) => j.key).join(',')}`
+			: `appshot publish ${failed.map((j) => shellQuote(j.key)).join(' ')}`;
 		console.error(`appshot: retry only the missing ones with: ${retry}`);
 		process.exit(1);
 	}

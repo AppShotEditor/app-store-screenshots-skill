@@ -126,7 +126,8 @@ sells the benefit, as fractions of the image height (0 = top, 1 = bottom). Examp
 
 Leave out chrome that doesn't sell, such as tab bars and navigation titles. The composer keeps every
 corner of a focus band inside all four canvas edges and any panorama seam. That holds on tilted
-devices too: it reduces a bleed, shrinks the device slightly or reduces the tilt to keep it. If the selling
+devices and zoom cards too: it reduces a bleed, shrinks the device or card slightly, or reduces the
+tilt to keep it. If the selling
 UI is a small detail (one card, one control), also give a `crop` `{ x, y, w, h }` (fractions) around
 it; concept B turns that screen into a magnified zoom card. Judge `focus` from the image you looked
 at, not from the shot list.
@@ -237,9 +238,11 @@ example:
 - a tilt reduced to keep the side margins.
 
 `lint` runs the same checks as `publish` (plan, compose, template validation), so a plan that lints
-clean publishes. Add `--strict` to make warnings fail the command. If the copy is too long to leave
-the device usable room, composing fails with "copy too long for this canvas". Cut the subheadline or
-headline.
+clean publishes. Add `--strict` to make warnings fail the command. If the copy leaves the device less than
+half the room it would get with no copy, composing fails with "copy too long for this canvas". Cut
+the subheadline or headline. If it fails with "device … doesn't fit a W×H canvas", the canvas is the
+problem, not the copy. Omit `canvasWidth`/`canvasHeight`, or pick a device that matches the
+screenshot.
 
 Common `deviceId`s: `iphone_17_pro`, `iphone_17_pro_max`, `iphone_air`,
 `pixel_9_pro_xl`, `ipad_pro_13_m4`, `macbook_pro_14`. Match the screenshot's aspect
@@ -259,8 +262,10 @@ It prints one labelled link per concept, `A Framed: https://…`, and so on, whi
 and one editor project per concept.
 
 If a concept fails, the others are still published. The CLI prints which ones were not published,
-and the exact retry command, for example `publish --variants plan.json --only C`. Run only that; do
-not re-publish concepts that already have a link, or the user gets duplicate projects.
+and the exact retry command, for example `publish --variants plan.json --only C`. Run only that.
+Re-publishing a concept that already has a link doesn't break anything: a project is only created
+when a link is opened. It just leaves an unused handoff link behind, and gives the user two links
+for the same concept, so don't.
 
 The concepts are:
 

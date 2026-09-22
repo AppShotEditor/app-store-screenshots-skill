@@ -106,7 +106,7 @@ Plan-level `style` (all optional; a plan without it composes exactly as before):
 | --- | --- |
 | `presentation` | `device` (default, framed) · `frameless` (rounded screenshot + shadow) · `zoom` (magnified crop of `crop` / the focus band). |
 | `bleed` | `auto` (default; the no-tangent rule: a device that clears by ≥ 4% of H stays; one that would touch the edge bleeds ≥ 12% of its height instead, and clears only when every such bleed would crop its focus band) · `none` · `deep` (≥ 25%). |
-| `tilt` + `tiltScreens` | Degrees applied only to the listed screen indices. Use it as an accent on at most 1–2 screens. A tilted device prefers a bleed under `auto` / `deep`. If it can't keep its 5% side margins (and its focus band inside), it is shrunk by at most 20%, then the tilt is reduced, with a `tilt-reduced` warning. |
+| `tilt` + `tiltScreens` | Degrees applied only to the listed screen indices. Use it as an accent on at most 1–2 screens. A tilted device prefers a bleed under `auto` / `deep`. If a tilted device, frameless screenshot or zoom card can't keep its 5% side margins (and its focus band inside), it is shrunk by at most 20%, keeping a zoom card's aspect. After that the tilt is reduced, with a `tilt-reduced` warning. |
 | `palette` | `{ mode: "family" \| "sequence", colors: [hex…] }`. Backgrounds for screens that omit one. The headline colour auto-contrasts against them. |
 | `panorama` | `{ spans: [[0,1], …], straddle?, decoration?: "orbs" \| "none" }`. Adjacent screens share one continuous background. `straddle` is `true` (every span) or a list of span-start screen indices (e.g. `[0]`, the hero); that device crosses the seam. More than one crossing per set is lint-warned. |
 | `font` | One of the editor's fonts (Inter default, Arial, Helvetica, Georgia, Times New Roman, Courier New, Verdana, Trebuchet MS, Impact, Comic Sans MS). Line wraps are estimated with per-font metrics, so wide faces reserve more room. |
@@ -119,8 +119,10 @@ warning, not a smaller font:
 - a headline over 5 words or more than 2 lines;
 - a subheadline over 1 line.
 
-If the copy is so long that it leaves the device less than half its intended size, composing fails
-with "copy too long for this canvas: cut the subheadline or headline".
+If the copy is so long that it leaves the device less than half the size it would get with no copy,
+composing fails with "copy too long for this canvas … cut the subheadline or headline". If a device
+can't reach a usable size on the canvas even with no copy, the error says the canvas is the problem
+instead ("doesn't fit a W×H canvas … use the device's own canvas").
 
 **Concepts (`variants` / `publish --variants`).**
 - **Kept** from your plan: copy, badges, colours, `background`, `deviceId`, `screenshot`, `focus`,
@@ -132,6 +134,15 @@ with "copy too long for this canvas: cut the subheadline or headline".
   - A and B are straight, with no panorama;
   - C tilts only screen 1 (your `style.tilt`, or 8°) and uses your `panorama.spans` (else adjacent
     pairs). It straddles only the hero unless you set `straddle`.
+
+**Panorama backgrounds.** The span's first screen's background runs across the whole span:
+- a solid colour stays solid;
+- a linear gradient keeps its colour stops and `angle`; without an `angle`, it runs corner to
+  corner across the span;
+- a radial gradient or explicit `coords` can't span screens and is rejected with a clear error.
+
+Seam orbs are moved or shrunk so they never overlap either screen's text block, and dropped when
+there's no room.
 
 **Panorama in the editor.** The editor shows each screen separately. The two halves of a panorama
 (background, orbs, and the straddling device plus its "(continued)" copy) are independent layers on
@@ -166,8 +177,9 @@ fatal. `lint` exits non-zero on an invalid plan or template. `variants` never ov
 input and refuses to replace existing `plan-*.json` files without `--force`.
 
 Publishing several plans composes and validates all of them before the first upload. Each handoff
-then succeeds or fails on its own, labelled. Transient failures (network errors, 429, 5xx) are
-retried with backoff. A summary names what was published and prints the exact command that retries
+then succeeds or fails on its own, labelled. Transient failures are retried with backoff: network
+errors, 429, 5xx, and requests with no response within 30 s (`APPSHOTEDITOR_TIMEOUT_MS` overrides
+the timeout). A summary names what was published and prints the exact command that retries
 only the missing concepts (`--only B,C`) or plan files.
 
 Uploads are resumable: files already stored (same filename + size) are skipped, and if a batch

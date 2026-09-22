@@ -226,7 +226,7 @@
           "minimum": -30,
           "maximum": 30,
           "default": 0,
-          "description": "Degrees (clockwise) for the screens in tiltScreens. Rotation is an accent: 4–12°, on at most 1–2 screens (hero / panorama), never the core-feature explainer. A tilted device prefers a bleed (auto/deep); if it can't keep 5% side margins and its focus band inside, it shrinks ≤ 20% and then the tilt is reduced (tilt-reduced warning)."
+          "description": "Degrees (clockwise) for the screens in tiltScreens. Rotation is an accent: 4–12°, on at most 1–2 screens (hero / panorama), never the core-feature explainer. A tilted device prefers a bleed (auto/deep). If a tilted device, frameless screenshot or zoom card can't keep 5% side margins with its focus band inside, it shrinks ≤ 20% (a zoom card keeps its aspect) and then the tilt is reduced (tilt-reduced warning)."
         },
         "tiltScreens": {
           "type": "array",
@@ -276,7 +276,7 @@
           "required": [
             "spans"
           ],
-          "description": "Adjacent screens sharing one continuous background (each screen still works alone in search: its headline and focus UI stay inside it). In the editor the halves are independent layers.",
+          "description": "Adjacent screens sharing one continuous background: the span's first screen's background runs across the span. A solid colour stays solid; a linear gradient keeps its stops and angle (none → corner-to-corner diagonal); radial gradients and explicit coords can't span screens and are rejected. Each screen still works alone in search: its headline and focus UI stay inside it, and seam orbs avoid the text. In the editor the halves are independent layers.",
           "properties": {
             "spans": {
               "type": "array",
