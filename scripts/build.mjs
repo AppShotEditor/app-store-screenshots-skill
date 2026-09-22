@@ -14,6 +14,9 @@
 //
 // package.json is untouched, so once that version is published the normal path
 // (bump dep + npm install + plain rebuild) takes over again.
+//
+// OUT=<file> writes the bundle somewhere else (e.g. a scratch path while testing an unreleased
+// DSL) instead of the committed dist/appshot.mjs.
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -27,10 +30,11 @@ if (localDsl && !existsSync(resolve(localDsl, 'src/index.ts'))) {
 	throw new Error(`SHOT_DSL_PATH=${localDsl} has no src/index.ts`);
 }
 const dslVersion = JSON.parse(readFileSync(resolve(dslDir, 'package.json'), 'utf8')).version;
+const outfile = process.env.OUT ? resolve(process.env.OUT) : resolve(root, 'dist/appshot.mjs');
 
 await build({
 	entryPoints: [resolve(root, 'src/cli.ts')],
-	outfile: resolve(root, 'dist/appshot.mjs'),
+	outfile,
 	bundle: true,
 	platform: 'node',
 	format: 'esm',
@@ -40,4 +44,4 @@ await build({
 	logLevel: 'info'
 });
 
-console.log(`✓ Built dist/appshot.mjs (shot-dsl ${dslVersion} from ${localDsl ?? 'node_modules'})`);
+console.log(`✓ Built ${outfile} (shot-dsl ${dslVersion} from ${localDsl ?? 'node_modules'})`);

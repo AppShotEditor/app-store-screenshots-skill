@@ -1,12 +1,18 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "App Shot Editor compose plan",
-  "description": "Input to `appshot compose|publish`. The skill writes this after pairing benefits with uploaded screenshots.",
+  "description": "Input to `appshot lint|compose|variants|publish`. The skill writes this after pairing benefits with uploaded screenshots. Every field added in shot-dsl 0.4.0 (style, focus, crop, presentation, tilt, badge) is optional — a plan without them composes as before.",
   "type": "object",
-  "required": ["name", "screens"],
+  "required": [
+    "name",
+    "screens"
+  ],
   "additionalProperties": false,
   "properties": {
-    "name": { "type": "string", "description": "Project name (usually the app name)." },
+    "name": {
+      "type": "string",
+      "description": "Project name (usually the app name)."
+    },
     "canvasWidth": {
       "type": "number",
       "description": "Usually OMIT (recommended). When omitted, each screen gets its device class's canvas (phone 280×608, tablet 450×600, laptop 608×380 editor units) and the editor exports at the real App Store sizes — the layout is identical either way because every layer is sized proportionally to the canvas. Only set this (together with canvasHeight) if you have a specific reason to pin one canvas size, and only for a single-device plan: it forces ONE size across ALL screens, so a mixed-device plan would squeeze e.g. iPad screens into a phone-shaped canvas."
@@ -20,26 +26,37 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["headline", "background", "deviceId", "screenshot"],
+        "required": [
+          "headline",
+          "deviceId",
+          "screenshot"
+        ],
         "additionalProperties": false,
         "properties": {
           "headline": {
             "type": "string",
-            "description": "Short, benefit-led headline: ≈2–6 words, 2 lines max (e.g. \"Hear the word. Spell it.\"). Rendered large and bold (~8.5% of canvas width); longer copy is auto-shrunk and looks worse."
+            "description": "Short, benefit-led headline: 3–5 words, ≤ 2 lines at the set size (e.g. \"Hear the word. Spell it.\"). Rendered bold at ONE size for the whole set (~8.5% of canvas width) — never shrunk; longer copy triggers a lint warning and grows the reserved text area for every screen. Cut, don't shrink."
           },
-          "headlineColor": { "type": "string", "description": "Hex color, defaults to #ffffff." },
+          "headlineColor": {
+            "type": "string",
+            "description": "Hex. An explicit value always wins. If omitted: white on a screen's own explicit background; on a style.palette background or inside a panorama span, white or near-black — whichever reads best against the background actually behind the text."
+          },
           "subheadline": {
             "type": "string",
-            "description": "Optional short supporting line under the headline (one short sentence, ≲8 words). Rendered at ~55% of the headline size, slightly muted. Omit when the headline says it all."
+            "description": "Optional supporting line under the headline — ≤ 1 line (≈ 6–7 words at phone size). Rendered at ~55% of the headline size, slightly muted. Omit when the headline says it all."
           },
           "subheadlineColor": {
             "type": "string",
             "description": "Hex color for the subheadline. Defaults to headlineColor at 85% opacity."
           },
           "layout": {
-            "enum": ["text-top", "text-bottom", "device-bleed"],
+            "enum": [
+              "text-top",
+              "text-bottom",
+              "device-bleed"
+            ],
             "default": "text-top",
-            "description": "text-top (default): text above, device below bleeding off the bottom edge. text-bottom: device at the top bleeding off the TOP edge, text below it. device-bleed: text on top, an oversized device (~95% of width) bleeding heavily off the bottom — a hero look."
+            "description": "text-top (default): text above, device below — it clears the bottom by ≥4% or bleeds ≥12% of its height (never 'just touching'). text-bottom: the same mirrored (device on top, text below). device-bleed: a hero device pushed lower, bleeding more. Devices are ≤ 90% of the width. Screens sharing a layout (and device/presentation/tilt) share one scale + baseline; `variants` sets every layout to text-top."
           },
           "deviceId": {
             "type": "string",
@@ -47,45 +64,312 @@
           },
           "screenshot": {
             "type": "object",
-            "required": ["url", "width", "height"],
+            "required": [
+              "url",
+              "width",
+              "height"
+            ],
             "additionalProperties": false,
             "properties": {
-              "url": { "type": "string", "description": "Asset url from the upload manifest." },
-              "width": { "type": "number" },
-              "height": { "type": "number" }
+              "url": {
+                "type": "string",
+                "description": "Asset url from the upload manifest."
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
             }
           },
           "background": {
             "type": "object",
-            "required": ["type"],
+            "required": [
+              "type"
+            ],
             "properties": {
-              "type": { "enum": ["solid", "gradient"] },
-              "color": { "type": "string", "description": "For type=solid." },
+              "type": {
+                "enum": [
+                  "solid",
+                  "gradient"
+                ]
+              },
+              "color": {
+                "type": "string",
+                "description": "For type=solid."
+              },
               "gradient": {
                 "type": "object",
                 "properties": {
-                  "type": { "enum": ["linear", "radial"] },
+                  "type": {
+                    "enum": [
+                      "linear",
+                      "radial"
+                    ]
+                  },
                   "colorStops": {
                     "type": "array",
                     "items": {
                       "type": "object",
-                      "required": ["offset", "color"],
+                      "required": [
+                        "offset",
+                        "color"
+                      ],
                       "properties": {
-                        "offset": { "type": "number" },
-                        "color": { "type": "string" }
+                        "offset": {
+                          "type": "number"
+                        },
+                        "color": {
+                          "type": "string"
+                        }
                       }
                     }
                   }
                 }
               }
+            },
+            "description": "Required unless style.palette is set (then omit it to use the palette). Keep one cohesive palette across the set."
+          },
+          "focus": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "top",
+              "bottom"
+            ],
+            "description": "The screenshot's selling UI as fractions of its height (0 = top, 1 = bottom), marked after LOOKING at the screenshot. Its corners always stay ≥2% inside every canvas edge and panorama seam (tilted devices included; a bleed/tilt is reduced to keep it). A zoom card too small for the band warns zoom-focus-cropped.",
+            "properties": {
+              "top": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "bottom": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "crop": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "description": "Zoom crop as fractions of the screenshot (x + w ≤ 1, y + h ≤ 1). Used by presentation zoom; defaults to the focus band.",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "w": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "h": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "presentation": {
+            "enum": [
+              "device",
+              "frameless",
+              "zoom"
+            ],
+            "description": "Overrides style.presentation for this screen."
+          },
+          "tilt": {
+            "type": "number",
+            "minimum": -30,
+            "maximum": 30,
+            "description": "Overrides the style tilt for this screen (degrees, clockwise)."
+          },
+          "badge": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Short social-proof pill above the headline (1–3 words, e.g. \"Teacher-approved\", \"Editors' Choice\"). A badge row is reserved on every screen of the set so headlines stay aligned."
+          }
+        }
+      }
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Set-wide style. The composer always applies the pro rules: one device scale / baseline / headline size per set, text area reserved for the tallest text block, devices ≤ 90% of the width keeping 5% side margins, no device 'just touching' the bottom (it clears by ≥4% of the height or bleeds by ≥12% of the device), and marked focus bands kept inside every edge and seam.",
+      "properties": {
+        "presentation": {
+          "enum": [
+            "device",
+            "frameless",
+            "zoom"
+          ],
+          "default": "device",
+          "description": "device: framed mockup. frameless: the bare screenshot, rounded + soft shadow. zoom: a magnified crop of each screen's `crop` (else the centre of its `focus` band), rounded + shadow."
+        },
+        "tilt": {
+          "type": "number",
+          "minimum": -30,
+          "maximum": 30,
+          "default": 0,
+          "description": "Degrees (clockwise) for the screens in tiltScreens. Rotation is an accent: 4–12°, on at most 1–2 screens (hero / panorama), never the core-feature explainer. A tilted device prefers a bleed (auto/deep); if it can't keep 5% side margins and its focus band inside, it shrinks ≤ 20% and then the tilt is reduced (tilt-reduced warning)."
+        },
+        "tiltScreens": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "0-based screen indices that get `tilt`. Default: none."
+        },
+        "bleed": {
+          "enum": [
+            "auto",
+            "none",
+            "deep"
+          ],
+          "default": "auto",
+          "description": "auto: the no-tangent rule — a device that clears the edge by ≥4% stays; one that would touch it bleeds decisively (≥12%, growing toward the 90%-width cap, then shifting down), clearing with a margin only if every such bleed would crop its focus band. none: devices always fully visible. deep: bleed ≥25% of the device (reduced if it would crop a focus band)."
+        },
+        "palette": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "colors"
+          ],
+          "description": "Background system for screens that omit `background` (the headline colour then auto-contrasts against it). family: every screen shares one gradient through `colors`. sequence: screen i uses colors[i % n] as a soft gradient.",
+          "properties": {
+            "mode": {
+              "enum": [
+                "family",
+                "sequence"
+              ]
+            },
+            "colors": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+              }
             }
           }
+        },
+        "panorama": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spans"
+          ],
+          "description": "Adjacent screens sharing one continuous background (each screen still works alone in search: its headline and focus UI stay inside it). In the editor the halves are independent layers.",
+          "properties": {
+            "spans": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "description": "Runs of adjacent, ascending screen indices, e.g. [[0, 1], [2, 3]]. A screen may be in at most one span; all screens of a span must share a canvas size (device class)."
+            },
+            "straddle": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              ],
+              "default": false,
+              "description": "Devices that cross a seam into the next screen (emitted on both screens, seam-aligned): true = the first screen of every span, or a list of span-start screen indices (e.g. [0] — the hero only). Keep it to ONE per set (more is lint-warned). Limited so a marked focus band stays inside its screen, or skipped."
+            },
+            "decoration": {
+              "enum": [
+                "orbs",
+                "none"
+              ],
+              "default": "orbs",
+              "description": "Soft circles centred on each seam."
+            }
+          }
+        },
+        "font": {
+          "enum": [
+            "Inter",
+            "Arial",
+            "Helvetica",
+            "Georgia",
+            "Times New Roman",
+            "Courier New",
+            "Verdana",
+            "Trebuchet MS",
+            "Impact",
+            "Comic Sans MS"
+          ],
+          "default": "Inter",
+          "description": "Font for all text — the editor's font list (pick the closest to the brand font). Line wraps are estimated with per-font metrics."
         }
       }
     }
   },
   "dependencies": {
-    "canvasWidth": ["canvasHeight"],
-    "canvasHeight": ["canvasWidth"]
-  }
+    "canvasWidth": [
+      "canvasHeight"
+    ],
+    "canvasHeight": [
+      "canvasWidth"
+    ]
+  },
+  "allOf": [
+    {
+      "if": {
+        "not": {
+          "required": [
+            "style"
+          ],
+          "properties": {
+            "style": {
+              "required": [
+                "palette"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "screens": {
+            "items": {
+              "required": [
+                "background"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }
