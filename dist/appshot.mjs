@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @appshoteditor/shot-dsl 0.2.0
+// @appshoteditor/shot-dsl 0.3.0
 
 // src/cli.ts
 import { readFileSync } from "node:fs";
@@ -7,107 +7,6 @@ import { basename, extname } from "node:path";
 
 // node_modules/@appshoteditor/shot-dsl/src/types.ts
 var CURRENT_SCHEMA_VERSION = 2;
-
-// node_modules/@appshoteditor/shot-dsl/src/validate.ts
-var LAYER_TYPES = ["background", "text", "image", "device", "shape"];
-function isValidLayerJSON(data) {
-  if (!data || typeof data !== "object") return false;
-  const obj = data;
-  return typeof obj.id === "string" && typeof obj.name === "string" && typeof obj.type === "string" && LAYER_TYPES.includes(obj.type) && typeof obj.visible === "boolean" && typeof obj.locked === "boolean";
-}
-function isValidScreenLayersJSON(data) {
-  if (!data || typeof data !== "object") return false;
-  const obj = data;
-  return typeof obj.schemaVersion === "number" && Array.isArray(obj.layers) && obj.layers.every(isValidLayerJSON);
-}
-function generateLayerId() {
-  return `layer-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-function validateTemplate(data) {
-  const errors = [];
-  if (!data || typeof data !== "object") {
-    return { valid: false, errors: ["Template must be an object"] };
-  }
-  const t = data;
-  if (typeof t.id !== "string" || !t.id) errors.push("id must be a non-empty string");
-  if (typeof t.name !== "string" || !t.name) errors.push("name must be a non-empty string");
-  if (!Array.isArray(t.screens) || t.screens.length === 0) {
-    errors.push("screens must be a non-empty array");
-  } else {
-    t.screens.forEach((screen, i) => {
-      if (!isValidScreenLayersJSON(screen)) {
-        errors.push(`screens[${i}] is not a valid screen`);
-        return;
-      }
-      const s = screen;
-      if (s.schemaVersion > CURRENT_SCHEMA_VERSION) {
-        errors.push(`screens[${i}] has unsupported schemaVersion ${s.schemaVersion}`);
-      }
-      s.layers.forEach((layer, j) => {
-        if (!isValidLayerJSON(layer)) errors.push(`screens[${i}].layers[${j}] is invalid`);
-      });
-    });
-  }
-  return { valid: errors.length === 0, errors };
-}
-
-// node_modules/@appshoteditor/shot-dsl/src/builders.ts
-var DEFAULT_CANVAS_WIDTH = 280;
-var DEFAULT_CANVAS_HEIGHT = 600;
-function makeTextLayer(opts) {
-  const id = opts.id ?? generateLayerId();
-  return {
-    id,
-    name: opts.name ?? "Text",
-    type: "text",
-    visible: opts.visible ?? true,
-    locked: opts.locked ?? false,
-    templateRole: opts.templateRole,
-    templateKey: opts.templateKey,
-    fabricData: {
-      type: "Textbox",
-      left: opts.left,
-      top: opts.top,
-      width: opts.width,
-      text: opts.text,
-      fill: opts.fill ?? "#ffffff",
-      fontSize: opts.fontSize ?? 28,
-      fontFamily: opts.fontFamily ?? "Inter",
-      fontWeight: opts.fontWeight ?? "700",
-      textAlign: opts.textAlign ?? "center",
-      lineHeight: opts.lineHeight ?? 1.1,
-      // Match the editor convention (addText, makeImageLayer, makeShapeLayer all
-      // use center origin) so `left`/`top` are the box center, not its corner.
-      originX: opts.originX ?? "center",
-      originY: opts.originY ?? "center",
-      layerId: id,
-      layerType: "text"
-    }
-  };
-}
-function makeScreen(opts) {
-  return {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    canvasWidth: opts.canvasWidth ?? DEFAULT_CANVAS_WIDTH,
-    canvasHeight: opts.canvasHeight ?? DEFAULT_CANVAS_HEIGHT,
-    deviceClass: opts.deviceClass,
-    layers: opts.layers,
-    background: opts.background
-  };
-}
-function makeTemplate(opts) {
-  return {
-    id: opts.id ?? generateLayerId(),
-    name: opts.name,
-    description: opts.description,
-    thumbnail: opts.thumbnail ?? "",
-    tags: opts.tags ?? [],
-    version: opts.version ?? "1.0.0",
-    screens: opts.screens,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    author: opts.author
-  };
-}
 
 // node_modules/@appshoteditor/shot-dsl/src/device-frames.ts
 var deviceFrames = [
@@ -393,6 +292,247 @@ function deviceClassForDeviceId(deviceId) {
   return null;
 }
 
+// node_modules/@appshoteditor/shot-dsl/src/validate.ts
+var LAYER_TYPES = ["background", "text", "image", "device", "shape"];
+function isValidLayerJSON(data) {
+  if (!data || typeof data !== "object") return false;
+  const obj = data;
+  return typeof obj.id === "string" && typeof obj.name === "string" && typeof obj.type === "string" && LAYER_TYPES.includes(obj.type) && typeof obj.visible === "boolean" && typeof obj.locked === "boolean";
+}
+function isValidScreenLayersJSON(data) {
+  if (!data || typeof data !== "object") return false;
+  const obj = data;
+  return typeof obj.schemaVersion === "number" && Array.isArray(obj.layers) && obj.layers.every(isValidLayerJSON);
+}
+function generateLayerId() {
+  return `layer-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+var UPLOADED_SCREENSHOT_SRC = /^\/api\/screenshots\/[A-Za-z0-9_-]{1,128}\/raw$/;
+function isUploadedScreenshotSrc(src) {
+  return typeof src === "string" && UPLOADED_SCREENSHOT_SRC.test(src);
+}
+var DEVICE_FRAME_SRC = /^\/devices\/[a-z0-9][a-z0-9-]*\.(?:webp|png)$/;
+function isDeviceFrameSrc(src) {
+  return typeof src === "string" && DEVICE_FRAME_SRC.test(src);
+}
+var SCREENSHOT_ROTATIONS = [0, 90, 180, 270];
+var SCREENSHOT_KEYS = /* @__PURE__ */ new Set(["src", "width", "height", "rotation"]);
+function validateDeviceScreenshot(value, at = "screenshot") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [`${at} must be an object`];
+  const errors = [];
+  const shot = value;
+  for (const key of Object.keys(shot)) {
+    if (!SCREENSHOT_KEYS.has(key)) errors.push(`${at}.${key} is not allowed`);
+  }
+  if (!isUploadedScreenshotSrc(shot.src)) {
+    errors.push(`${at}.src must be an uploaded screenshot URL (/api/screenshots/<id>/raw)`);
+  }
+  for (const dim of ["width", "height"]) {
+    const n = shot[dim];
+    if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) {
+      errors.push(`${at}.${dim} must be a positive number`);
+    }
+  }
+  if (shot.rotation !== void 0 && !SCREENSHOT_ROTATIONS.includes(shot.rotation)) {
+    errors.push(`${at}.rotation must be one of 0, 90, 180, 270`);
+  }
+  return errors;
+}
+var EDITOR_INTERNAL_PROPS = [
+  "pendingScreenshot",
+  "_lastFrameScaleX",
+  "_lastFrameScaleY",
+  "_userScale",
+  "_userOffsetX",
+  "_userOffsetY"
+];
+var FORBIDDEN_KEYS = ["__proto__", "constructor", "prototype"];
+function findForbiddenKeys(value, at, depth = 0) {
+  if (depth > 32 || !value || typeof value !== "object") return [];
+  const errors = [];
+  const entries = Array.isArray(value) ? value.map((v, k) => [`[${k}]`, v]) : Object.keys(value).map((k) => [`.${k}`, value[k]]);
+  for (const [suffix, v] of entries) {
+    const key = suffix.startsWith(".") ? suffix.slice(1) : null;
+    if (key !== null && FORBIDDEN_KEYS.includes(key)) {
+      errors.push(`${at}${suffix} is not allowed`);
+      continue;
+    }
+    errors.push(...findForbiddenKeys(v, `${at}${suffix}`, depth + 1));
+  }
+  return errors;
+}
+function isAllowedImageRef(value) {
+  return isUploadedScreenshotSrc(value) || isDeviceFrameSrc(value);
+}
+function checkImageRefs(value, at, errors, depth = 0) {
+  if (depth > 32) {
+    errors.push(`${at} is nested too deeply`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((v, k) => checkImageRefs(v, `${at}[${k}]`, errors, depth + 1));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, v] of Object.entries(value)) {
+    if ((key === "src" || key === "source") && !isAllowedImageRef(v)) {
+      errors.push(
+        `${at}.${key} must be an uploaded screenshot (/api/screenshots/<id>/raw) or a device frame asset (/devices/<name>.webp|png)`
+      );
+    } else if (v && typeof v === "object") {
+      checkImageRefs(v, `${at}.${key}`, errors, depth + 1);
+    }
+  }
+}
+function validateLayerFabricData(layer, fd, at, frameIds) {
+  const errors = [];
+  const fdAt = `${at}.fabricData`;
+  for (const prop of EDITOR_INTERNAL_PROPS) {
+    if (prop in fd) errors.push(`${fdAt}.${prop} is editor-internal and not allowed`);
+  }
+  const isLegacyScreenshot = fd.layerRole === "screenshot";
+  if (layer.type === "device") {
+    if (fd.layerRole !== void 0 && fd.layerRole !== "frame") {
+      errors.push(`${fdAt}.layerRole must be "frame" on a device layer`);
+    }
+    if (typeof fd.deviceId !== "string" || !getDeviceFrame(fd.deviceId)) {
+      errors.push(`${fdAt}.deviceId must be a known device id`);
+    }
+    if (!isDeviceFrameSrc(fd.src)) {
+      errors.push(`${fdAt}.src must be a device frame asset (/devices/<name>.webp|png)`);
+    }
+    if (typeof fd.deviceFrameId === "string" && fd.deviceFrameId) {
+      if (frameIds.has(fd.deviceFrameId)) {
+        errors.push(`${fdAt}.deviceFrameId "${fd.deviceFrameId}" is duplicated in this screen`);
+      }
+      frameIds.add(fd.deviceFrameId);
+    }
+  } else if (isLegacyScreenshot) {
+    if (layer.type !== "image" || typeof fd.type !== "string" || fd.type.toLowerCase() !== "image") {
+      errors.push(`${fdAt}.layerRole "screenshot" is only allowed on image layers`);
+    }
+    if (!isUploadedScreenshotSrc(fd.src)) {
+      errors.push(`${fdAt}.src must be an uploaded screenshot URL (/api/screenshots/<id>/raw)`);
+    }
+    if (fd.deviceId !== void 0 && (typeof fd.deviceId !== "string" || !getDeviceFrame(fd.deviceId))) {
+      errors.push(`${fdAt}.deviceId must be a known device id`);
+    }
+  } else {
+    if (fd.layerRole !== void 0) errors.push(`${fdAt}.layerRole is only allowed on device / legacy screenshot layers`);
+    for (const key of ["deviceFrameId", "deviceId", "deviceScale"]) {
+      if (fd[key] !== void 0) errors.push(`${fdAt}.${key} is only allowed on device / legacy screenshot layers`);
+    }
+    if (fd.layerType === "deviceFrame") errors.push(`${fdAt}.layerType "deviceFrame" is only allowed on device layers`);
+  }
+  if (fd.screenshot !== void 0) {
+    if (layer.type !== "device") errors.push(`${fdAt}.screenshot is only allowed on device layers`);
+    errors.push(...validateDeviceScreenshot(fd.screenshot, `${fdAt}.screenshot`));
+  }
+  const { src: _src, screenshot: _screenshot, ...rest } = fd;
+  void _screenshot;
+  if (layer.type !== "device" && !isLegacyScreenshot && _src !== void 0 && !isAllowedImageRef(_src)) {
+    errors.push(
+      `${fdAt}.src must be an uploaded screenshot (/api/screenshots/<id>/raw) or a device frame asset (/devices/<name>.webp|png)`
+    );
+  }
+  checkImageRefs(rest, fdAt, errors);
+  return errors;
+}
+function validateTemplate(data) {
+  const errors = [];
+  if (!data || typeof data !== "object") {
+    return { valid: false, errors: ["Template must be an object"] };
+  }
+  const t = data;
+  if (typeof t.id !== "string" || !t.id) errors.push("id must be a non-empty string");
+  if (typeof t.name !== "string" || !t.name) errors.push("name must be a non-empty string");
+  if (!Array.isArray(t.screens) || t.screens.length === 0) {
+    errors.push("screens must be a non-empty array");
+  } else {
+    t.screens.forEach((screen, i) => {
+      if (!isValidScreenLayersJSON(screen)) {
+        errors.push(`screens[${i}] is not a valid screen`);
+        return;
+      }
+      const s = screen;
+      if (s.schemaVersion > CURRENT_SCHEMA_VERSION) {
+        errors.push(`screens[${i}] has unsupported schemaVersion ${s.schemaVersion}`);
+      }
+      const layerIds = /* @__PURE__ */ new Set();
+      const frameIds = /* @__PURE__ */ new Set();
+      s.layers.forEach((layer, j) => {
+        const at = `screens[${i}].layers[${j}]`;
+        if (!isValidLayerJSON(layer)) errors.push(`${at} is invalid`);
+        errors.push(...findForbiddenKeys(layer, at));
+        if (layerIds.has(layer.id)) errors.push(`${at}.id "${layer.id}" is duplicated in this screen`);
+        layerIds.add(layer.id);
+        const fd = layer.fabricData;
+        if (!fd || typeof fd !== "object") return;
+        errors.push(...validateLayerFabricData(layer, fd, at, frameIds));
+      });
+    });
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+// node_modules/@appshoteditor/shot-dsl/src/builders.ts
+var DEFAULT_CANVAS_WIDTH = 280;
+var DEFAULT_CANVAS_HEIGHT = 600;
+function makeTextLayer(opts) {
+  const id = opts.id ?? generateLayerId();
+  return {
+    id,
+    name: opts.name ?? "Text",
+    type: "text",
+    visible: opts.visible ?? true,
+    locked: opts.locked ?? false,
+    templateRole: opts.templateRole,
+    templateKey: opts.templateKey,
+    fabricData: {
+      type: "Textbox",
+      left: opts.left,
+      top: opts.top,
+      width: opts.width,
+      text: opts.text,
+      fill: opts.fill ?? "#ffffff",
+      fontSize: opts.fontSize ?? 28,
+      fontFamily: opts.fontFamily ?? "Inter",
+      fontWeight: opts.fontWeight ?? "700",
+      textAlign: opts.textAlign ?? "center",
+      lineHeight: opts.lineHeight ?? 1.1,
+      // Match the editor convention (addText, makeImageLayer, makeShapeLayer all
+      // use center origin) so `left`/`top` are the box center, not its corner.
+      originX: opts.originX ?? "center",
+      originY: opts.originY ?? "center",
+      layerId: id,
+      layerType: "text"
+    }
+  };
+}
+function makeScreen(opts) {
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    canvasWidth: opts.canvasWidth ?? DEFAULT_CANVAS_WIDTH,
+    canvasHeight: opts.canvasHeight ?? DEFAULT_CANVAS_HEIGHT,
+    deviceClass: opts.deviceClass,
+    layers: opts.layers,
+    background: opts.background
+  };
+}
+function makeTemplate(opts) {
+  return {
+    id: opts.id ?? generateLayerId(),
+    name: opts.name,
+    description: opts.description,
+    thumbnail: opts.thumbnail ?? "",
+    tags: opts.tags ?? [],
+    version: opts.version ?? "1.0.0",
+    screens: opts.screens,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    author: opts.author
+  };
+}
+
 // node_modules/@appshoteditor/shot-dsl/src/frames.ts
 var DEFAULT_CANVAS_WIDTH2 = 280;
 var DEFAULT_CANVAS_HEIGHT2 = 600;
@@ -405,94 +545,49 @@ function calculateDeviceScale(device, canvasWidth = DEFAULT_CANVAS_WIDTH2, canva
     0.15
   );
 }
-function makeDeviceFrameLayers(opts) {
+function makeDeviceFrameLayer(opts) {
   const device = getDeviceFrame(opts.deviceId);
   if (!device) throw new Error(`Unknown device: ${opts.deviceId}`);
   const canvasWidth = opts.canvasWidth ?? DEFAULT_CANVAS_WIDTH2;
   const canvasHeight = opts.canvasHeight ?? DEFAULT_CANVAS_HEIGHT2;
   const scale = opts.scale ?? calculateDeviceScale(device, canvasWidth, canvasHeight);
   const frameId = `device-frame-${generateLayerId()}`;
-  const screenshotId = generateLayerId();
-  const scaledImageWidth = device.imageDimensions.width * scale;
-  const scaledImageHeight = device.imageDimensions.height * scale;
-  const screenWidth = device.screenBounds.width * scale;
-  const screenHeight = device.screenBounds.height * scale;
-  const screenOffsetX = device.screenBounds.x * scale;
-  const screenOffsetY = device.screenBounds.y * scale;
-  const cornerRadius = device.cornerRadius * scale;
-  const frameCenterX = opts.centerX ?? canvasWidth / 2;
-  const frameCenterY = opts.centerY ?? canvasHeight / 2;
-  const screenCenterX = frameCenterX - scaledImageWidth / 2 + screenOffsetX + screenWidth / 2;
-  const screenCenterY = frameCenterY - scaledImageHeight / 2 + screenOffsetY + screenHeight / 2;
-  const imgScaleX = screenWidth / opts.screenshotWidth;
-  const imgScaleY = screenHeight / opts.screenshotHeight;
-  const screenshot = {
-    id: screenshotId,
-    name: opts.name ? `${opts.name} screenshot` : "Screenshot",
+  const fabricData = {
     type: "image",
-    visible: true,
-    locked: false,
-    fabricData: {
-      type: "image",
-      src: opts.screenshotUrl,
-      crossOrigin: "anonymous",
-      left: screenCenterX,
-      top: screenCenterY,
-      width: opts.screenshotWidth,
-      height: opts.screenshotHeight,
-      scaleX: imgScaleX,
-      scaleY: imgScaleY,
-      originX: "center",
-      originY: "center",
-      selectable: false,
-      evented: false,
-      // clipPath is in the image's local (unscaled) coordinate space.
-      clipPath: {
-        type: "Rect",
-        width: opts.screenshotWidth,
-        height: opts.screenshotHeight,
-        rx: cornerRadius / imgScaleX,
-        ry: cornerRadius / imgScaleY,
-        left: 0,
-        top: 0,
-        originX: "center",
-        originY: "center"
-      },
-      layerId: screenshotId,
-      layerType: "image",
-      deviceFrameId: frameId,
-      layerRole: "screenshot",
-      deviceId: opts.deviceId,
-      screenshotRotation: opts.screenshotRotation ?? 0
-    }
+    src: device.frameAsset,
+    crossOrigin: "anonymous",
+    left: opts.centerX ?? canvasWidth / 2,
+    top: opts.centerY ?? canvasHeight / 2,
+    width: device.imageDimensions.width,
+    height: device.imageDimensions.height,
+    scaleX: scale,
+    scaleY: scale,
+    originX: "center",
+    originY: "center",
+    layerId: frameId,
+    layerType: "deviceFrame",
+    deviceFrameId: frameId,
+    layerRole: "frame",
+    deviceId: opts.deviceId,
+    deviceScale: scale
   };
-  const frame = {
+  if (opts.screenshotUrl) {
+    const { screenshotWidth: width, screenshotHeight: height } = opts;
+    if (!(typeof width === "number" && width > 0 && typeof height === "number" && height > 0)) {
+      throw new Error("makeDeviceFrameLayer: screenshotWidth/screenshotHeight (> 0) are required with screenshotUrl");
+    }
+    const screenshot = { src: opts.screenshotUrl, width, height };
+    if (opts.screenshotRotation) screenshot.rotation = opts.screenshotRotation;
+    fabricData.screenshot = screenshot;
+  }
+  return {
     id: frameId,
     name: opts.name ?? device.name,
     type: "device",
     visible: true,
     locked: false,
-    fabricData: {
-      type: "image",
-      src: device.frameAsset,
-      crossOrigin: "anonymous",
-      left: frameCenterX,
-      top: frameCenterY,
-      width: device.imageDimensions.width,
-      height: device.imageDimensions.height,
-      scaleX: scale,
-      scaleY: scale,
-      originX: "center",
-      originY: "center",
-      layerId: frameId,
-      layerType: "deviceFrame",
-      deviceFrameId: frameId,
-      layerRole: "frame",
-      deviceId: opts.deviceId,
-      deviceScale: scale
-    }
+    fabricData
   };
-  return { screenshot, frame };
 }
 
 // node_modules/@appshoteditor/shot-dsl/src/compose.ts
@@ -586,7 +681,7 @@ function composeTemplate(plan) {
       scale = Math.min(W * spec.deviceWidth / fw, (H - deviceTop) / (1 - spec.maxBleed) / fh);
       centerY = deviceTop + fh * scale / 2;
     }
-    const { screenshot, frame } = makeDeviceFrameLayers({
+    const frame = makeDeviceFrameLayer({
       deviceId: screen.deviceId,
       screenshotUrl: screen.screenshot.url,
       screenshotWidth: screen.screenshot.width,
@@ -612,7 +707,7 @@ function composeTemplate(plan) {
       templateRole: "editable",
       templateKey: "headline"
     });
-    const layers = [screenshot, frame, headline];
+    const layers = [frame, headline];
     if (screen.subheadline?.trim()) {
       const sub = makeTextLayer({
         text: screen.subheadline,
