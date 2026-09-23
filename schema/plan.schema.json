@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "App Shot Editor compose plan",
-  "description": "Input to `appshot lint|compose|variants|publish`. The skill writes this after pairing benefits with uploaded screenshots. Every field added in shot-dsl 0.4.0 (style, focus, crop, presentation, tilt, badge) is optional — a plan without them composes as before.",
+  "description": "Input to `appshot lint|compose|variants|publish`. The skill writes this after pairing benefits with uploaded screenshots. Every field added in shot-dsl 0.4.0 (style, focus, crop, presentation, tilt, badge) and 0.5.0 (art, style.hero / rhythm / callouts / shadows, tonal palettes, panorama motifs, per-screen callout / mascot) is optional — a plan without them composes (0.5.0 adds a default hero on screen 1; `style.hero: false` turns it off). Handoffs are capped at 256 KB: lint errors above it and warns above 80%.",
   "type": "object",
   "required": [
     "name",
@@ -35,7 +35,7 @@
         "properties": {
           "headline": {
             "type": "string",
-            "description": "Short, benefit-led headline: 3–5 words, ≤ 2 lines at the set size (e.g. \"Hear the word. Spell it.\"). Rendered bold at ONE size for the whole set (~8.5% of canvas width) — never shrunk; longer copy triggers a lint warning and grows the reserved text area for every screen. Cut, don't shrink."
+            "description": "Short, benefit-led headline: 3–5 words, ≤ 2 lines at the set size (e.g. \"Hear the word. Spell it.\"). Rendered bold at ONE size for the whole set (~8.5% of canvas width) — never shrunk; longer copy triggers a lint warning and grows the reserved text area for every screen. Cut, don't shrink. 0.5.0: write the line break you want with \\n (\"Ace every\\nspelling test\") — it is always kept; only a line too wide for the text box is broken further. Without \\n the composer balances the lines (no single word stranded). A single word wider than the box is an error."
           },
           "headlineColor": {
             "type": "string",
@@ -203,6 +203,20 @@
             "type": "string",
             "maxLength": 40,
             "description": "Short social-proof pill above the headline (1–3 words, e.g. \"Teacher-approved\", \"Editors' Choice\"). A badge row is reserved on every screen of the set so headlines stay aligned."
+          },
+          "callout": {
+            "description": "0.5.0 magnified callout of this screen's selling element: a crop of the same screenshot shown 1.6–2.2× larger as a rounded card over the device, never over the text, and hiding at most 35% of the rest of the focus band (it is moved, shrunk, or skipped with callout-skipped). Keep it ≤ ~60% of the screenshot width. `false` opts out of an auto callout.",
+            "oneOf": [
+              {
+                "const": false
+              },
+              {
+                "$ref": "#/definitions/crop"
+              }
+            ]
+          },
+          "mascot": {
+            "$ref": "#/definitions/mascot"
           }
         }
       }
@@ -252,10 +266,11 @@
             "mode",
             "colors"
           ],
-          "description": "Background system for screens that omit `background` (the headline colour then auto-contrasts against it). family: every screen shares one gradient through `colors`. sequence: screen i uses colors[i % n] as a soft gradient.",
+          "description": "Background system for screens that omit `background`, with ONE text colour for the whole set that passes WCAG AA (≥ 4.5:1) on every palette background — the composer adjusts the palette tones (never explicit backgrounds) until it does. tonal (recommended): colors = [brand base, accent?] from the app icon / UI → light↔deep steps of the base hue per screen, text in a deep (or pale) tint of the same hue, badges in the accent. family: every screen shares one gradient through `colors`. sequence: screen i uses colors[i % n] as a soft gradient.",
           "properties": {
             "mode": {
               "enum": [
+                "tonal",
                 "family",
                 "sequence"
               ]
@@ -267,16 +282,22 @@
                 "type": "string",
                 "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
               }
+            },
+            "tone": {
+              "enum": [
+                "light",
+                "vivid",
+                "deep"
+              ],
+              "default": "vivid",
+              "description": "tonal only. light: pale tints + dark text. vivid: around the brand colour. deep: richer, darker, warmer steps."
             }
           }
         },
         "panorama": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "spans"
-          ],
-          "description": "Adjacent screens sharing one continuous background: the span's first screen's background runs across the span. A solid colour stays solid; a linear gradient keeps its stops and angle (none → corner-to-corner diagonal); radial gradients and explicit coords can't span screens and are rejected. Each screen still works alone in search: its headline and focus UI stay inside it, and seam orbs avoid the text. In the editor the halves are independent layers.",
+          "description": "Adjacent screens sharing one continuous background: the span's first screen's background runs across the span. A solid colour stays solid; a linear gradient keeps its stops and angle (none → corner-to-corner diagonal); radial gradients and explicit coords can't span screens and are rejected. Each screen still works alone in search: its headline and focus UI stay inside it, and seam orbs avoid the text. In the editor the halves are independent layers. A tonal palette runs ONE ramp through the span's tones. `spans` may be omitted to only pick the `decoration` that `appshot variants` concept C uses.",
           "properties": {
             "spans": {
               "type": "array",
@@ -304,15 +325,17 @@
                 }
               ],
               "default": false,
-              "description": "Devices that cross a seam into the next screen (emitted on both screens, seam-aligned): true = the first screen of every span, or a list of span-start screen indices (e.g. [0] — the hero only). Keep it to ONE per set (more is lint-warned). Limited so a marked focus band stays inside its screen, or skipped."
+              "description": "Devices that cross a seam into the next screen (emitted on both screens, seam-aligned): true = the first screen of every span, or a list of span-start screen indices (e.g. [0] — the hero only). Keep it to ONE per set (more is lint-warned). Limited so a marked focus band stays inside its screen, or skipped. 0.5.0: a straddle must show ≥ 18% of the device on the next screen; otherwise it is skipped (straddle-skipped) — a sliver reads as a glitch."
             },
             "decoration": {
               "enum": [
                 "orbs",
+                "honeycomb",
+                "wave",
                 "none"
               ],
               "default": "orbs",
-              "description": "Soft circles centred on each seam."
+              "description": "orbs: soft circles on each seam. honeycomb / wave: one continuous motif path across the whole span, crossing every seam (pick what fits the brand — honeycomb for a bee, wave for most). none."
             }
           }
         },
@@ -331,6 +354,136 @@
           ],
           "default": "Inter",
           "description": "Font for all text — the editor's font list (pick the closest to the brand font). Line wraps are estimated with per-font metrics."
+        },
+        "hero": {
+          "description": "0.5.0 hero screen (default ON for screen 1 — `false` turns it off): headline ≈1.25× the set size (stepped down if that would add a line), its own device pose with a deeper bleed, an optional badge and mascot. It sells the promise; the other screens keep one shared system.",
+          "oneOf": [
+            {
+              "const": false
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "screen": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 1.4,
+                  "default": 1.25
+                },
+                "layout": {
+                  "enum": [
+                    "text-top",
+                    "text-bottom",
+                    "device-bleed"
+                  ]
+                },
+                "bleed": {
+                  "enum": [
+                    "auto",
+                    "none",
+                    "deep"
+                  ],
+                  "default": "deep"
+                },
+                "tilt": {
+                  "type": "number",
+                  "minimum": -30,
+                  "maximum": 30
+                },
+                "mascot": {
+                  "$ref": "#/definitions/mascot"
+                },
+                "badge": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "Hero badge (else the screen's own). Only TRUE, checkable facts (\"Grades 1–12\", \"No ads\") — never invented awards or ratings."
+                }
+              }
+            }
+          ]
+        },
+        "rhythm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "every"
+          ],
+          "description": "0.5.0 accent rhythm: every `every`-th screen (the 4th, 8th… for 4) gets an accent treatment so the set isn't one template. Accents keep the shared type size.",
+          "properties": {
+            "every": {
+              "type": "integer",
+              "minimum": 3,
+              "maximum": 6
+            },
+            "treatment": {
+              "enum": [
+                "text-bottom",
+                "callout"
+              ],
+              "default": "text-bottom",
+              "description": "text-bottom: device on top (bleeding off the top), text below. callout: a magnified callout (explicit, else from focus) + a deeper bleed."
+            }
+          }
+        },
+        "callouts": {
+          "enum": [
+            "auto",
+            "none"
+          ],
+          "default": "none",
+          "description": "0.5.0. auto: screens without an explicit `callout` get one derived from a TIGHT focus band (≤ 50% of the height; a left-aligned slice at its top). Explicit `callout` crops are always used; mark them on the selling screens."
+        },
+        "shadows": {
+          "type": "boolean",
+          "default": true,
+          "description": "0.5.0 soft brand-tinted drop shadows on devices, frameless screenshots, callouts and mascots."
+        }
+      }
+    },
+    "art": {
+      "type": "array",
+      "description": "0.5.0 brand art (mascots). Upload the transparent PNG with `appshot upload` like a screenshot and copy its manifest entry here; referenced by `mascot.art`.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "url",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Your name for it, e.g. \"bee\"."
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^/api/screenshots/[A-Za-z0-9_-]{1,128}/raw$",
+            "description": "The uploaded asset URL from the upload manifest."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "faces": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "description": "Which way the character faces (so the composer can turn it toward the canvas)."
+          }
         }
       }
     }
@@ -371,5 +524,74 @@
         }
       }
     }
-  ]
+  ],
+  "definitions": {
+    "crop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "description": "A rectangle as fractions (0–1) of the screenshot: x, y = top-left; w, h = size. Must stay inside (x + w ≤ 1, y + h ≤ 1).",
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "mascot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "art"
+      ],
+      "description": "Brand art (a mascot) placed with intent: it never covers the text, a callout or the focus band's core, and may overlap the device edge. Candidates for the anchor are tried first, then the other anchors, at 100/85/70% size; if none fits the screen gets a mascot-skipped warning.",
+      "properties": {
+        "art": {
+          "type": "string",
+          "description": "The `id` of an entry in plan.art."
+        },
+        "anchor": {
+          "enum": [
+            "headline",
+            "device-top",
+            "device-side",
+            "seam"
+          ],
+          "default": "headline",
+          "description": "headline: beside the headline's last/first line (or over the device's top corner under it). device-top: perched on the device's top corner. device-side: on the device's side edge (inside the canvas). seam: centred on the panorama seam to the next screen (or the previous one for a span's last screen), emitted on both screens — only in a panorama span."
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "description": "Rendered width ÷ canvas width. Default 0.3 on the hero, 0.22 elsewhere."
+        },
+        "flip": {
+          "type": "boolean",
+          "description": "Mirror horizontally. Default: face into the canvas when the art declares `faces`."
+        }
+      }
+    }
+  }
 }

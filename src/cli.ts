@@ -14,7 +14,8 @@
  *   lint <plan.json...>    Validate + compose (no network) and print copy/composition warnings.
  *   compose <plan.json>    Compose and print the validated Template JSON (no network).
  *   variants <plan.json> [--out dir] [--force]
- *                          Write 3 concept plans (plan-A Framed, plan-B Frameless, plan-C Panorama);
+ *                          Write 3 art directions (plan-A Brand Classic, plan-B Clean Frameless,
+ *                          plan-C Story Panorama);
  *                          never overwrites the input, existing outputs only with --force.
  *   publish <plan.json...> | publish --variants <plan.json> [--only B,C]
  *                          Compose + create one handoff per plan (or per A/B/C concept); prints the
@@ -28,8 +29,11 @@ import {
 	COMPOSE_FONTS,
 	COMPOSE_LAYOUTS,
 	COMPOSE_PRESENTATIONS,
+	MASCOT_ANCHORS,
 	composeSet,
 	getDeviceFrame,
+	handoffBytes,
+	MAX_HANDOFF_BYTES,
 	isUploadedScreenshotSrc,
 	makeVariants,
 	validateTemplate,
@@ -301,10 +305,17 @@ const SCREEN_KEYS = new Set([
 	'crop',
 	'presentation',
 	'tilt',
-	'badge'
+	'badge',
+	'callout',
+	'mascot'
 ]);
-const PLAN_KEYS = new Set(['name', 'screens', 'canvasWidth', 'canvasHeight', 'style']);
-const STYLE_KEYS = new Set(['presentation', 'tilt', 'tiltScreens', 'bleed', 'palette', 'panorama', 'font']);
+const PLAN_KEYS = new Set(['name', 'screens', 'canvasWidth', 'canvasHeight', 'style', 'art']);
+const STYLE_KEYS = new Set(['presentation', 'tilt', 'tiltScreens', 'bleed', 'palette', 'panorama', 'font', 'hero', 'rhythm', 'callouts', 'shadows']);
+const PALETTE_MODES = ['family', 'sequence', 'tonal'];
+const PALETTE_TONES = ['light', 'vivid', 'deep'];
+const DECORATIONS = ['orbs', 'none', 'honeycomb', 'wave'];
+const MASCOT_KEYS = ['art', 'anchor', 'size', 'flip'];
+const HERO_KEYS = ['screen', 'scale', 'layout', 'bleed', 'tilt', 'mascot', 'badge'];
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 /**
@@ -337,6 +348,48 @@ function validatePlan(plan: unknown): string[] {
 		}
 	};
 	let hasPalette = false;
+	// Brand art (0.5.0): uploaded like screenshots; referenced by mascot.art.
+	const artIds = new Set<string>();
+	if (plan.art !== undefined) {
+		if (!Array.isArray(plan.art)) errors.push('art must be an array of { id, url, width, height, faces? }');
+		else
+			plan.art.forEach((a, k) => {
+				const at = `art[${k}]`;
+				if (!isObj(a)) {
+					errors.push(`${at} must be an object`);
+					return;
+				}
+				for (const key of Object.keys(a)) if (!['id', 'url', 'width', 'height', 'faces'].includes(key)) errors.push(`${at}: unknown field "${key}"`);
+				if (typeof a.id !== 'string' || !a.id) errors.push(`${at}.id must be a non-empty string`);
+				else if (artIds.has(a.id)) errors.push(`${at}.id "${a.id}" is duplicated`);
+				else artIds.add(a.id);
+				if (!isUploadedScreenshotSrc(a.url)) errors.push(`${at}.url must be an uploaded-asset URL from the upload manifest (/api/screenshots/<id>/raw)`);
+				posNumber(a.width, `${at}.width`);
+				posNumber(a.height, `${at}.height`);
+				if (a.faces !== undefined && !['left', 'right'].includes(a.faces as string)) errors.push(`${at}.faces must be "left" or "right"`);
+			});
+	}
+	const mascotValue = (m: unknown, at: string) => {
+		if (!isObj(m)) {
+			errors.push(`${at} must be { art, anchor?, size?, flip? }`);
+			return;
+		}
+		for (const key of Object.keys(m)) if (!MASCOT_KEYS.includes(key)) errors.push(`${at}: unknown field "${key}"`);
+		if (typeof m.art !== 'string' || !artIds.has(m.art)) errors.push(`${at}.art must be the id of an entry in plan.art`);
+		if (m.anchor !== undefined && !(MASCOT_ANCHORS as readonly unknown[]).includes(m.anchor)) errors.push(`${at}.anchor must be one of ${MASCOT_ANCHORS.join(', ')}`);
+		if (m.size !== undefined && (typeof m.size !== 'number' || !(m.size > 0) || m.size > 0.5)) errors.push(`${at}.size must be a fraction of the canvas width (0–0.5)`);
+		if (m.flip !== undefined && typeof m.flip !== 'boolean') errors.push(`${at}.flip must be true/false`);
+	};
+	const cropValue = (c: unknown, at: string) => {
+		if (!isObj(c)) {
+			errors.push(`${at} must be { x, y, w, h } (fractions of the screenshot)`);
+			return;
+		}
+		for (const k of ['x', 'y', 'w', 'h']) fraction(c[k], `${at}.${k}`);
+		const r = c as Record<string, number>;
+		if (r.w <= 0 || r.h <= 0) errors.push(`${at}.w and ${at}.h must be greater than 0`);
+		if (r.x + r.w > 1.0001 || r.y + r.h > 1.0001) errors.push(`${at} must stay inside the screenshot (x + w ≤ 1, y + h ≤ 1)`);
+	};
 	if (plan.style !== undefined) {
 		const style = plan.style;
 		if (!isObj(style)) {
@@ -359,23 +412,31 @@ function validatePlan(plan: unknown): string[] {
 			}
 			if (style.palette !== undefined) {
 				const pal = style.palette;
-				if (!isObj(pal) || !['family', 'sequence'].includes(pal.mode as string)) {
-					errors.push('style.palette must be { mode: "family" | "sequence", colors: [hex…] }');
+				if (!isObj(pal) || !PALETTE_MODES.includes(pal.mode as string)) {
+					errors.push('style.palette must be { mode: "tonal" | "family" | "sequence", colors: [hex…], tone? }');
 				} else if (!Array.isArray(pal.colors) || pal.colors.length === 0 || !pal.colors.every((c) => typeof c === 'string' && HEX.test(c))) {
 					errors.push('style.palette.colors must be a non-empty array of #rgb / #rrggbb hex colors');
 				} else {
 					hasPalette = true;
 				}
-				if (isObj(pal)) for (const key of Object.keys(pal)) if (!['mode', 'colors'].includes(key)) errors.push(`unknown style.palette field "${key}"`);
+				if (isObj(pal)) {
+					for (const key of Object.keys(pal)) if (!['mode', 'colors', 'tone'].includes(key)) errors.push(`unknown style.palette field "${key}"`);
+					if (pal.tone !== undefined && (pal.mode !== 'tonal' || !PALETTE_TONES.includes(pal.tone as string))) {
+						errors.push(`style.palette.tone must be one of ${PALETTE_TONES.join(', ')} (tonal palettes only)`);
+					}
+				}
 			}
 			if (style.panorama !== undefined) {
 				const pano = style.panorama;
-				if (!isObj(pano) || !Array.isArray(pano.spans)) {
-					errors.push('style.panorama must be { spans: [[i, i+1], …], straddle?, decoration? }');
+				// `spans` may be omitted (0.5.0): a panorama with only `decoration` sets the motif that
+				// `appshot variants` uses for concept C's own spans.
+				if (!isObj(pano) || (pano.spans !== undefined && !Array.isArray(pano.spans))) {
+					errors.push('style.panorama must be { spans?: [[i, i+1], …], straddle?, decoration? }');
 				} else {
 					for (const key of Object.keys(pano)) if (!['spans', 'straddle', 'decoration'].includes(key)) errors.push(`unknown style.panorama field "${key}"`);
 					const seen = new Set<number>();
-					pano.spans.forEach((span, k) => {
+					const spans: unknown[] = Array.isArray(pano.spans) ? pano.spans : [];
+					spans.forEach((span, k) => {
 						const at = `style.panorama.spans[${k}]`;
 						if (!Array.isArray(span) || span.length < 2) {
 							errors.push(`${at} must list at least 2 adjacent screen indices`);
@@ -389,19 +450,47 @@ function validatePlan(plan: unknown): string[] {
 						});
 					});
 					if (Array.isArray(pano.straddle)) {
-						const starts = new Set(pano.spans.map((span) => (Array.isArray(span) ? span[0] : undefined)));
+						const starts = new Set(spans.map((span) => (Array.isArray(span) ? span[0] : undefined)));
 						pano.straddle.forEach((v, k) => {
 							if (!starts.has(v)) errors.push(`style.panorama.straddle[${k}] must be the first screen index of a span`);
 						});
 					} else if (pano.straddle !== undefined && typeof pano.straddle !== 'boolean') {
 						errors.push('style.panorama.straddle must be true/false or a list of span-start screen indices');
 					}
-					if (pano.decoration !== undefined && !['orbs', 'none'].includes(pano.decoration as string)) {
-						errors.push('style.panorama.decoration must be "orbs" or "none"');
+					if (pano.decoration !== undefined && !DECORATIONS.includes(pano.decoration as string)) {
+						errors.push(`style.panorama.decoration must be one of ${DECORATIONS.join(', ')}`);
 					}
 				}
 			}
 		}
+	}
+	// 0.5.0 art-direction style fields.
+	if (isObj(plan.style)) {
+		const style = plan.style;
+		if (style.hero !== undefined && style.hero !== false) {
+			const hero = style.hero;
+			if (!isObj(hero)) errors.push('style.hero must be an object (or false to turn the hero off)');
+			else {
+				for (const key of Object.keys(hero)) if (!HERO_KEYS.includes(key)) errors.push(`unknown style.hero field "${key}"`);
+				if (hero.screen !== undefined) index(hero.screen, 'style.hero.screen');
+				if (hero.scale !== undefined && (typeof hero.scale !== 'number' || hero.scale < 1 || hero.scale > 1.4)) errors.push('style.hero.scale must be a number from 1 to 1.4');
+				if (hero.layout !== undefined && !(COMPOSE_LAYOUTS as readonly unknown[]).includes(hero.layout)) errors.push(`style.hero.layout must be one of ${COMPOSE_LAYOUTS.join(', ')}`);
+				if (hero.bleed !== undefined && !(COMPOSE_BLEEDS as readonly unknown[]).includes(hero.bleed)) errors.push(`style.hero.bleed must be one of ${COMPOSE_BLEEDS.join(', ')}`);
+				if (hero.tilt !== undefined) tiltValue(hero.tilt, 'style.hero.tilt');
+				if (hero.mascot !== undefined) mascotValue(hero.mascot, 'style.hero.mascot');
+				if (hero.badge !== undefined && (typeof hero.badge !== 'string' || !hero.badge.trim() || hero.badge.length > 40)) errors.push('style.hero.badge must be a short non-empty string (≤ 40 chars)');
+			}
+		}
+		if (style.rhythm !== undefined) {
+			const r = style.rhythm;
+			if (!isObj(r) || !Number.isInteger(r.every) || (r.every as number) < 3 || (r.every as number) > 6) errors.push('style.rhythm must be { every: 3–6, treatment?: "text-bottom" | "callout" }');
+			else {
+				for (const key of Object.keys(r)) if (!['every', 'treatment'].includes(key)) errors.push(`unknown style.rhythm field "${key}"`);
+				if (r.treatment !== undefined && !['text-bottom', 'callout'].includes(r.treatment as string)) errors.push('style.rhythm.treatment must be "text-bottom" or "callout"');
+			}
+		}
+		if (style.callouts !== undefined && !['auto', 'none'].includes(style.callouts as string)) errors.push('style.callouts must be "auto" or "none"');
+		if (style.shadows !== undefined && typeof style.shadows !== 'boolean') errors.push('style.shadows must be true/false');
 	}
 	if (typeof plan.name !== 'string' || !plan.name) errors.push('name must be a non-empty string');
 	if (plan.canvasWidth !== undefined) posNumber(plan.canvasWidth, 'canvasWidth');
@@ -456,15 +545,7 @@ function validatePlan(plan: unknown): string[] {
 				}
 			}
 		}
-		if (screen.crop !== undefined) {
-			if (!isObj(screen.crop)) errors.push(`${at}.crop must be { x, y, w, h } (fractions of the screenshot)`);
-			else {
-				for (const k of ['x', 'y', 'w', 'h']) fraction(screen.crop[k], `${at}.crop.${k}`);
-				const c = screen.crop as Record<string, number>;
-				if (c.w <= 0 || c.h <= 0) errors.push(`${at}.crop.w and crop.h must be greater than 0`);
-				if (c.x + c.w > 1.0001 || c.y + c.h > 1.0001) errors.push(`${at}.crop must stay inside the screenshot (x + w ≤ 1, y + h ≤ 1)`);
-			}
-		}
+		if (screen.crop !== undefined) cropValue(screen.crop, `${at}.crop`);
 		if (screen.presentation !== undefined && !(COMPOSE_PRESENTATIONS as readonly unknown[]).includes(screen.presentation)) {
 			errors.push(`${at}.presentation must be one of ${COMPOSE_PRESENTATIONS.join(', ')}`);
 		}
@@ -472,6 +553,8 @@ function validatePlan(plan: unknown): string[] {
 		if (screen.badge !== undefined && (typeof screen.badge !== 'string' || !screen.badge.trim() || screen.badge.length > 40)) {
 			errors.push(`${at}.badge must be a short non-empty string (≤ 40 chars)`);
 		}
+		if (screen.callout !== undefined && screen.callout !== false) cropValue(screen.callout, `${at}.callout`);
+		if (screen.mascot !== undefined) mascotValue(screen.mascot, `${at}.mascot`);
 	});
 	return errors;
 }
@@ -489,6 +572,25 @@ function readPlan(path: string): ComposePlan {
 	return plan as ComposePlan;
 }
 
+/** Warn at this share of the server's handoff size cap (MAX_HANDOFF_BYTES). */
+const HANDOFF_WARN_SHARE = 0.8;
+const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`;
+
+/**
+ * The composed handoff's size vs the server cap: an error over MAX_HANDOFF_BYTES (the server would
+ * 413 it), a warning over 80%. Big sets are usually long panorama spans: fewer screens per span, or
+ * `decoration: "orbs"`, shrink it.
+ */
+function sizeCheck(template: unknown): { error?: string; warning?: string; bytes: number } {
+	const bytes = handoffBytes(template);
+	const limit = `${kb(MAX_HANDOFF_BYTES)} handoff limit`;
+	if (bytes > MAX_HANDOFF_BYTES) {
+		return { bytes, error: `composed handoff is ${kb(bytes)}, over the ${limit} — split the plan, use shorter panorama spans or decoration "orbs"` };
+	}
+	if (bytes > HANDOFF_WARN_SHARE * MAX_HANDOFF_BYTES) return { bytes, warning: `composed handoff is ${kb(bytes)}, close to the ${limit}` };
+	return { bytes };
+}
+
 /** Compose + validate; prints lint warnings (stderr). `--strict` makes any warning fatal. */
 function buildTemplate(plan: ComposePlan, opts: { strict: boolean; label?: string }) {
 	let composed: ReturnType<typeof composeSet>;
@@ -501,7 +603,10 @@ function buildTemplate(plan: ComposePlan, opts: { strict: boolean; label?: strin
 	const result = validateTemplate(template);
 	if (!result.valid) fail(`composed template is invalid: ${result.errors.join('; ')}`);
 	printWarnings(report.warnings, opts.label);
-	if (opts.strict && report.warnings.length > 0) {
+	const size = sizeCheck(template);
+	if (size.error) fail(`${opts.label ? `${opts.label}: ` : ''}${size.error}`);
+	if (size.warning) console.error(`appshot: warning${opts.label ? ` (${opts.label})` : ''} [handoff-size] ${size.warning}`);
+	if (opts.strict && (report.warnings.length > 0 || size.warning)) {
 		fail(`${opts.label ? `${opts.label}: ` : ''}${report.warnings.length} warning(s) with --strict — fix the plan and re-run`);
 	}
 	return template;
@@ -572,11 +677,17 @@ function lint(argv: string[]): void {
 		const label = positional.length > 1 ? basename(path) : undefined;
 		printWarnings(report.warnings, label);
 		warningsTotal += report.warnings.length;
-		if (!result.valid) {
+		const size = sizeCheck(template);
+		if (size.warning) {
+			warningsTotal++;
+			console.error(`appshot: warning${label ? ` (${label})` : ''} [handoff-size] ${size.warning}`);
+		}
+		if (!result.valid || size.error) {
 			invalid++;
-			console.log(`${basename(path)}: INVALID — ${result.errors.join('; ')}`);
+			console.log(`${basename(path)}: INVALID — ${[...result.errors, ...(size.error ? [size.error] : [])].join('; ')}`);
 		} else {
-			console.log(`${basename(path)}: ${report.warnings.length === 0 ? 'OK — no warnings' : `valid, ${report.warnings.length} warning(s)`}`);
+			const count = report.warnings.length + (size.warning ? 1 : 0);
+			console.log(`${basename(path)}: ${count === 0 ? 'OK — no warnings' : `valid, ${count} warning(s)`}`);
 		}
 	}
 	if (invalid > 0 || (strict && warningsTotal > 0)) process.exit(1);
@@ -599,8 +710,11 @@ function variants(argv: string[]): void {
 	if (existing.length && !force) fail(`refusing to overwrite existing ${existing.join(', ')} — pass --force to replace them`);
 	const composed = outputs.map((o) => ({ ...o, report: safeCompose(o.v.plan, `plan-${o.v.key}`).report }));
 	for (const c of composed) {
-		const result = validateTemplate(safeCompose(c.v.plan, `plan-${c.v.key}`).template);
+		const template = safeCompose(c.v.plan, `plan-${c.v.key}`).template;
+		const result = validateTemplate(template);
 		if (!result.valid) fail(`plan-${c.v.key}: composed template is invalid: ${result.errors.join('; ')}`);
+		const size = sizeCheck(template);
+		if (size.error) fail(`plan-${c.v.key}: ${size.error}`);
 	}
 	if (strict) {
 		const warned = composed.filter((c) => c.report.warnings.length > 0);
