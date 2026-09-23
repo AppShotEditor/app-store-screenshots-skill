@@ -108,7 +108,7 @@ Each shot must specify a state that *shows the benefit happening*:
 - **Clean chrome** — no system alerts, permission prompts, keyboards (unless typing *is* the
   point), toasts, or status-bar clutter. Set the simulator's status bar BEFORE capturing (full
   battery, not charging, 9:41):
-  `xcrun simctl status_bar <udid> override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3`
+  `xcrun simctl status_bar <udid> override --time 9:41 --batteryState discharging --batteryLevel 100 --cellularBars 4 --wifiBars 3`
   (`xcrun simctl list devices booted` gives the udid). A charging bolt or a random time looks unfinished.
 
 Example — the quality bar (a spelling app):
