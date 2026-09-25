@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @appshoteditor/shot-dsl 0.5.0
+// @appshoteditor/shot-dsl 0.5.1
 
 // src/cli.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -1246,6 +1246,7 @@ var BADGE_GAP = 0.45;
 var BADGE_MAX_CHARS = 28;
 var FRAMELESS_WIDTH = 0.9;
 var FRAMELESS_RADIUS = 0.1;
+var FRAMELESS_RADIUS_MIN = 0.03;
 var ZOOM_WIDTH = 0.88;
 var ZOOM_RADIUS = 0.05;
 var ZOOM_MIN_ASPECT = 0.5;
@@ -1260,6 +1261,7 @@ var CALLOUT_TEXT_GAP = 0.02;
 var CALLOUT_MAG = { min: 1.6, max: 2.2, floor: 1.25 };
 var CALLOUT_MAX_FOCUS_COVER = 0.35;
 var CALLOUT_RADIUS = 0.035;
+var CALLOUT_CORNER_PAD = 0.35;
 var CALLOUT_AUTO = { x: 0.02, w: 0.64, aspect: 0.4 };
 var CALLOUT_AUTO_MAX_FOCUS = 0.5;
 var MASCOT_SIZE = { hero: 0.3, screen: 0.22 };
@@ -1627,13 +1629,18 @@ function placeGroup(members, bleed, warnings, straddleRight = false) {
 function shadowFor(W, scale, look, spec = SHADOW) {
   return { color: look.shadowColor, blur: spec.blur * W / scale, offsetX: 0, offsetY: spec.offsetY * W / scale };
 }
+function frameCornerRadiusRatio(deviceId) {
+  const device = getDeviceFrame(deviceId);
+  if (!device) return FRAMELESS_RADIUS;
+  return Math.min(FRAMELESS_RADIUS, Math.max(FRAMELESS_RADIUS_MIN, device.cornerRadius / device.screenBounds.width));
+}
 function makeScreenshotImageLayer(r, p, look) {
   const id = generateLayerId();
   const shot = r.plan.screenshot;
   const zoom = p.zoom;
   const width = zoom ? zoom.cropW : shot.width;
   const height = zoom ? zoom.cropH : shot.height;
-  const radius = zoom ? ZOOM_RADIUS * r.W : FRAMELESS_RADIUS * width * p.scale;
+  const radius = zoom ? ZOOM_RADIUS * r.W : frameCornerRadiusRatio(r.plan.deviceId) * width * p.scale;
   const fabricData = {
     type: "image",
     src: shot.url,
@@ -2509,17 +2516,31 @@ function calloutGeometry(r, p, cx, rects, warnings) {
   const req = r.calloutReq;
   const { W, H } = r;
   const shot = r.plan.screenshot;
-  const crop = { x: req.x * shot.width, y: req.y * shot.height, w: req.w * shot.width, h: req.h * shot.height };
+  const requested = { x: req.x * shot.width, y: req.y * shot.height, w: req.w * shot.width, h: req.h * shot.height };
   const scr = p.subject.screen;
   const screenScale = p.scale * scr.width / shot.width;
+  const texts = textRectList(rects);
+  const gap = CALLOUT_TEXT_GAP * H;
+  const [lo, hi] = r.layout === "text-bottom" ? [CALLOUT_EDGE * H, Math.min(...texts.map((t) => t.top)) - gap] : [Math.max(...texts.map((t) => t.bottom)) + gap, H * (1 - CALLOUT_EDGE)];
+  const baseWReq = requested.w * screenScale;
+  const baseHReq = requested.h * screenScale;
+  let prelimMag = Math.min(CALLOUT_MAG.max, Math.max(CALLOUT_MAG.min, CALLOUT_TARGET_WIDTH * W / baseWReq));
+  prelimMag = Math.min(prelimMag, (1 - 2 * CALLOUT_MARGIN) * W / baseWReq, (hi - lo) / baseHReq);
+  prelimMag = Math.max(prelimMag, 1e-6);
+  const pad = CALLOUT_CORNER_PAD * CALLOUT_RADIUS * W / (screenScale * prelimMag);
+  const padX0 = Math.max(0, requested.x - pad);
+  const padY0 = Math.max(0, requested.y - pad);
+  const crop = {
+    x: padX0,
+    y: padY0,
+    w: Math.min(shot.width, requested.x + requested.w + pad) - padX0,
+    h: Math.min(shot.height, requested.y + requested.h + pad) - padY0
+  };
   const centre = subjectPointToCanvas(
     p.subject,
     { x: scr.x + (crop.x + crop.w / 2) / shot.width * scr.width, y: scr.y + (crop.y + crop.h / 2) / shot.height * scr.height },
     { cx, cy: p.cy, scale: p.scale, angle: p.angle }
   );
-  const texts = textRectList(rects);
-  const gap = CALLOUT_TEXT_GAP * H;
-  const [lo, hi] = r.layout === "text-bottom" ? [CALLOUT_EDGE * H, Math.min(...texts.map((t) => t.top)) - gap] : [Math.max(...texts.map((t) => t.bottom)) + gap, H * (1 - CALLOUT_EDGE)];
   const baseW = crop.w * screenScale;
   const baseH = crop.h * screenScale;
   let mag = Math.min(CALLOUT_MAG.max, Math.max(CALLOUT_MAG.min, CALLOUT_TARGET_WIDTH * W / baseW));
@@ -2566,7 +2587,7 @@ function calloutGeometry(r, p, cx, rects, warnings) {
         }
       }
     }
-    if (bestRect) return { rect: bestRect, mag: k, crop, scale: screenScale * k, focusCover: cover(bestRect) };
+    if (bestRect) return { rect: bestRect, mag: k, crop, requested, scale: screenScale * k, focusCover: cover(bestRect) };
     if (k <= CALLOUT_MAG.floor) break;
   }
   warnings.push({
@@ -2578,7 +2599,15 @@ function calloutGeometry(r, p, cx, rects, warnings) {
 }
 function makeCalloutLayer(r, c, look) {
   const id = generateLayerId();
-  const radius = CALLOUT_RADIUS * r.W;
+  const shot = r.plan.screenshot;
+  const EPS2 = 1e-6;
+  const pads = [];
+  if (c.crop.x > EPS2) pads.push(c.requested.x - c.crop.x);
+  if (c.crop.y > EPS2) pads.push(c.requested.y - c.crop.y);
+  if (c.crop.x + c.crop.w < shot.width - EPS2) pads.push(c.crop.x + c.crop.w - (c.requested.x + c.requested.w));
+  if (c.crop.y + c.crop.h < shot.height - EPS2) pads.push(c.crop.y + c.crop.h - (c.requested.y + c.requested.h));
+  const CORNER_INSET = 1 - 1 / Math.SQRT2;
+  const radius = pads.length ? Math.min(CALLOUT_RADIUS * r.W, Math.min(...pads) / CORNER_INSET * c.scale) : CALLOUT_RADIUS * r.W;
   const fabricData = {
     type: "image",
     src: r.plan.screenshot.url,
