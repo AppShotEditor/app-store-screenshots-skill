@@ -9,7 +9,7 @@
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
-    "@appshoteditor/shot-dsl": "^0.5.2"
+    "@appshoteditor/shot-dsl": "^0.5.3"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

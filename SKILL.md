@@ -220,13 +220,13 @@ Plan-level `style` (all optional):
   screen gets a light↔deep step of the brand hue. `tone`: `light` (pale, dark text), `vivid`
   (default), `deep`. Legacy: `family` (one shared gradient) / `sequence` (colours in turn) — avoid
   unrelated rainbow sequences; they don't belong to the brand.
-- `hero`: on by default for screen 1 (bigger type, deeper bleed). Give it the promise, plus
+- `hero`: on by default for screen 1 (bigger type, prefers a deeper bleed but clears rather than leave a gap under the text). Give it the promise, plus
   `{ "badge": "Grades 1–12", "mascot": { "art": "bee" } }`. `false` turns it off.
 - `rhythm`: `{ "every": 4 }` — every 4th screen gets an accent layout so the set isn't one template.
-- `callouts`: `"auto"` to derive callouts from tight focus bands (explicit `callout`s always apply).
+- `callouts`: `"auto"` to derive callouts from tight focus bands (explicit `callout`s always apply); `"none"` for no callouts — `variants` keeps it for A and B (C never has callouts).
 - `font`: from the list in step 3.
 - `presentation`: `device` (framed, default) | `frameless` | `zoom`.
-- `bleed`: `auto` (default; lets the no-tangent rule decide) | `none` | `deep`.
+- `bleed`: `auto` (default; lets the no-tangent rule decide) | `none` | `deep`. A device that would have to move down to bleed shrinks ≤ 12% to clear the edge instead, so there's never a big gap under the headline.
 - `tilt` + `tiltScreens`: 4–12° on at most 1–2 screens (the hero or a panorama), never the
   core-feature explainer.
 - `panorama`: `{ "spans": [[0,1]], "straddle": [0], "decoration": "wave" }` for adjacent screens that
@@ -337,7 +337,7 @@ The concepts are:
   A zoom card only where you gave a `crop`.
 - **C · Story Panorama**: the deeper brand tone as ONE continuous scene across triples and pairs of
   screens, a motif (`panorama.decoration`) flowing across the seams, the mascot flying across them,
-  a tilted hero and deeper bleeds. The most eye-catching in the search-results strip.
+  a tilted hero and big devices that bleed where they can. The most eye-catching in the search-results strip.
 
 Projects are named `<App> — A Brand Classic`, `<App> — B Clean Frameless` and
 `<App> — C Story Panorama`. Publish one

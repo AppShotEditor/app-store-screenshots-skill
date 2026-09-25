@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @appshoteditor/shot-dsl 0.5.2
+// @appshoteditor/shot-dsl 0.5.3
 
 // src/cli.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -673,6 +673,14 @@ var NO_TANGENT = {
   focusSideSafe: 0.02,
   /** A clear-with-margin option that shrinks the subject below this × its natural scale is rejected. */
   minClearScale: 0.6,
+  /**
+   * "Minimum disturbance": when growing toward a decisive bleed is capped short and the only way to
+   * reach `minBleed` is to shift the subject down (away from the text), shrinking it to clear the
+   * edge instead is preferred whenever that clear scale is still at least this × the (grown/capped)
+   * bleed scale — shrinking by ≤ 12% to clear beats pushing the subject down and leaving a gap under
+   * the text.
+   */
+  clearOverShift: 0.88,
   /** Below this × the layout's target scale the copy leaves no usable room (composeSet throws). */
   minScale: 0.5
 };
@@ -772,7 +780,17 @@ function solveVertical(inp) {
     if (overshoot(s, a) < t * s * eh - EPS) {
       const need = (H - a) / ((1 - t) * eh);
       s = Math.max(s0, Math.min(need, Math.max(sCap, s0)));
-      if (overshoot(s, a) < NO_TANGENT.minBleed * s * eh - EPS) a = H - s * eh * (1 - NO_TANGENT.minBleed);
+      if (overshoot(s, a) < NO_TANGENT.minBleed * s * eh - EPS) {
+        const shifted = H - s * eh * (1 - NO_TANGENT.minBleed);
+        if (focusOk(s, shifted)) {
+          const clear = clearOption();
+          if (clear && clear.scale >= NO_TANGENT.clearOverShift * s - EPS) {
+            const reason2 = clear.scale < s0 - EPS ? `shrunk ${Math.round((1 - clear.scale / s0) * 100)}% to clear instead of shifting down for a bleed` : "clears the edge (preferred over shifting down for a bleed)";
+            return { ...clear, reason: reason2 };
+          }
+        }
+        a = shifted;
+      }
     }
     const reason = overshoot(s, a) >= t * s * eh - EPS ? `bleeds ${Math.round(t * 100)}%+` : `grows to its size cap (no gap forced to reach ${Math.round(t * 100)}%+)`;
     if (focusOk(s, a)) return make(s, a, reason);
@@ -797,7 +815,7 @@ function solveVertical(inp) {
   if (naturalClear && !inp.preferBleed) return make(s0, near0, "natural placement clears the edge");
   if (naturalBleed && focusOk(s0, near0)) return make(s0, near0, "natural placement bleeds decisively");
   const bleed = bleedOption(NO_TANGENT.minBleed);
-  if (bleed) return inp.preferBleed ? { ...bleed, reason: `${bleed.reason} (tilt pairs with a bleed)` } : bleed;
+  if (bleed) return inp.preferBleed && bleed.mode === "bleed" ? { ...bleed, reason: `${bleed.reason} (tilt pairs with a bleed)` } : bleed;
   if (naturalClear) return make(s0, near0, "natural placement clears the edge");
   return clearOption() ?? forcedClear();
 }
@@ -2724,7 +2742,7 @@ function tonal(plan, tone) {
 }
 function baseStyle(plan) {
   const style = plan.style;
-  const out = { bleed: style?.bleed ?? "auto" };
+  const out = { bleed: style?.bleed ?? "auto", callouts: style?.callouts ?? "auto" };
   if (style?.font) out.font = style.font;
   return out;
 }
@@ -2782,8 +2800,7 @@ function makeVariants(plan) {
       presentation: "device",
       palette: tonal(plan, "vivid"),
       hero: hero(plan, { badge }),
-      rhythm: { every: VARIANT_RHYTHM_EVERY, treatment: "text-bottom" },
-      callouts: "auto"
+      rhythm: { every: VARIANT_RHYTHM_EVERY, treatment: "text-bottom" }
     },
     screens: plan.screens.map(baseScreen)
   });
@@ -2796,8 +2813,7 @@ function makeVariants(plan) {
       bleed: plan.style?.bleed === "none" ? "none" : "deep",
       presentation: "frameless",
       palette: tonal(plan, "light"),
-      hero: hero(plan, { badge, scale: 1.3 }),
-      callouts: "auto"
+      hero: hero(plan, { badge, scale: 1.3 })
     },
     screens: plan.screens.map((screen) => {
       const s = baseScreen(screen);
