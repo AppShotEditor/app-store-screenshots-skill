@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @appshoteditor/shot-dsl 0.5.1
+// @appshoteditor/shot-dsl 0.5.2
 
 // src/cli.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -654,7 +654,11 @@ var NO_TANGENT = {
   clearGap: 0.04,
   /** A subject that bleeds must lose at least this × its own (rotated) height. */
   minBleed: 0.12,
-  /** `bleed: "deep"` target, × the subject's height. */
+  /**
+   * `bleed: "deep"` target, × the subject's height. Reached by growing the subject (up to
+   * `maxWidth`·W) — never by shifting it down past a decisive (`minBleed`) overshoot, since a
+   * further down-shift would just be empty space between the text and the subject.
+   */
   deepBleed: 0.25,
   /** The focus band must end at least this × H inside the canvas edge. */
   focusSafe: 0.02,
@@ -768,15 +772,16 @@ function solveVertical(inp) {
     if (overshoot(s, a) < t * s * eh - EPS) {
       const need = (H - a) / ((1 - t) * eh);
       s = Math.max(s0, Math.min(need, Math.max(sCap, s0)));
-      if (overshoot(s, a) < t * s * eh - EPS) a = H - s * eh * (1 - t);
+      if (overshoot(s, a) < NO_TANGENT.minBleed * s * eh - EPS) a = H - s * eh * (1 - NO_TANGENT.minBleed);
     }
-    if (focusOk(s, a)) return make(s, a, `bleeds ${Math.round(t * 100)}%+`);
+    const reason = overshoot(s, a) >= t * s * eh - EPS ? `bleeds ${Math.round(t * 100)}%+` : `grows to its size cap (no gap forced to reach ${Math.round(t * 100)}%+)`;
+    if (focusOk(s, a)) return make(s, a, reason);
     if (inp.focusReach == null) return null;
     const fr = inp.focusReach;
     const sF = Math.min(s, Math.max(sCap, s0), (focusLimit - near0) / fr);
     const denom = eh * (1 - NO_TANGENT.minBleed) - fr;
     if (!(sF > 0) || denom <= 0 || sF < (H - focusLimit) / denom - EPS) return null;
-    const aF = Math.max(near0, Math.min(focusLimit - sF * fr, H - sF * eh * (1 - t)));
+    const aF = Math.max(near0, Math.min(focusLimit - sF * fr, H - sF * eh * (1 - NO_TANGENT.minBleed)));
     if (overshoot(sF, aF) < NO_TANGENT.minBleed * sF * eh - EPS || !focusOk(sF, aF)) return null;
     return make(sF, aF, "bleed reduced to keep the focus band visible");
   };
@@ -2428,6 +2433,7 @@ function composeSet(plan) {
       tangent: inTangentZone(overshoot, p.boxHeight, H),
       headlineSize: typo.headlineSize / W,
       headlineTop: g.headlineTop / H,
+      textBottom: (g.areaTop + typo.textArea) / H,
       tilt: p.angle,
       centerX: cx / W,
       role: r.role,
