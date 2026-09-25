@@ -153,8 +153,10 @@ at, not from the shot list.
 **Mark a `callout` on the 3–5 selling screens.** A callout is the one element that proves the
 benefit — the "3 to review" row, the P-L-A-Y tiles, the "B+" grade — shown magnified (1.6–2.2×) as a
 rounded card over the device, so it reads even at search-result size (~110 px wide). Give it as a
-crop `{ x, y, w, h }` (fractions of the image) tight around that element, **at most ~60% of the
-image width** (wider can't be magnified) and never cutting through words. The card may sit over its
+crop `{ x, y, w, h }` (fractions of the image) snug around that element with a small margin
+(~2% of the image on each side — the card's rounded corners clip anything touching the crop edge,
+e.g. selection handles), **at most ~60% of the image width** (wider can't be magnified) and never
+cutting through words. The card may sit over its
 own source (the pop-out) but never hides more than 35% of the rest of the `focus` band: the
 composer moves it up/down or out past the device edge, or shrinks it, and skips it
 (`callout-skipped`) if nothing works — then mark a smaller callout or a tighter focus. Don't put
