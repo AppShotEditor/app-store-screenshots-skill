@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @appshoteditor/shot-dsl 0.5.3
+// @appshoteditor/shot-dsl 0.6.0
 
 // src/cli.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -86,6 +86,31 @@ var deviceFrames = [
     imageDimensions: { width: 1490, height: 2996 },
     screenBounds: { x: 103, y: 106, width: 1284, height: 2786 },
     cornerRadius: 128
+  },
+  // iPhone Duo (foldable). Original vector drawings (static/devices/iphone-duo-*.svg, rasterised
+  // to .png/.webp). The screen opening is EXACTLY the App Store size, so screenshots fit 1:1.
+  // No crease is drawn over the inner (folding) display.
+  {
+    id: "iphone_duo_inner",
+    name: 'iPhone Duo (inner 7.6")',
+    platform: "ios",
+    category: "phone",
+    frameAsset: "/devices/iphone-duo-inner.webp",
+    imageDimensions: { width: 2183, height: 3029 },
+    screenBounds: { x: 88, y: 88, width: 2007, height: 2853 },
+    cornerRadius: 120,
+    deviceClass: "iphone_duo_inner"
+  },
+  {
+    id: "iphone_duo_outer",
+    name: 'iPhone Duo (outer 5.4")',
+    platform: "ios",
+    category: "phone",
+    frameAsset: "/devices/iphone-duo-outer.webp",
+    imageDimensions: { width: 1574, height: 2210 },
+    screenBounds: { x: 88, y: 88, width: 1398, height: 2034 },
+    cornerRadius: 140,
+    deviceClass: "iphone_duo_outer"
   },
   // -------------------------------------------------------------------------
   // ANDROID PHONES
@@ -286,6 +311,7 @@ function getDeviceFrame(id) {
 function deviceClassForDeviceId(deviceId) {
   const frame = getDeviceFrame(deviceId);
   if (!frame) return null;
+  if (frame.deviceClass) return frame.deviceClass;
   if (frame.platform === "ios") return frame.category === "tablet" ? "ipad_13" : "iphone_6_9";
   if (frame.platform === "android") return "android_phone";
   if (frame.platform === "macos" || frame.platform === "windows") return "macbook";
@@ -1203,8 +1229,15 @@ function motifPathForScreen(subpaths, k, W, pad) {
 }
 
 // node_modules/@appshoteditor/shot-dsl/src/compose.ts
+var DERIVED_CANVAS_LONG_SIDE = 608;
 function canvasDimsForDevice(deviceId) {
-  switch (getDeviceFrame(deviceId)?.category) {
+  const frame = getDeviceFrame(deviceId);
+  if (frame?.deviceClass) {
+    const { width: sw, height: sh } = frame.screenBounds;
+    const L = DERIVED_CANVAS_LONG_SIDE;
+    return sh >= sw ? { width: Math.round(L * sw / sh), height: L } : { width: L, height: Math.round(L * sh / sw) };
+  }
+  switch (frame?.category) {
     case "tablet":
       return { width: 450, height: 600 };
     case "laptop":

@@ -305,10 +305,18 @@ problem, not the copy. Omit `canvasWidth`/`canvasHeight`, or pick a device that 
 screenshot.
 
 Common `deviceId`s: `iphone_17_pro`, `iphone_17_pro_max`, `iphone_air`,
-`pixel_9_pro_xl`, `ipad_pro_13_m4`, `macbook_pro_14`. Match the screenshot's aspect
-ratio. For the full current list (older iPhone sizes, more iPad/Mac variants,
+`iphone_duo_inner`, `iphone_duo_outer`, `pixel_9_pro_xl`, `ipad_pro_13_m4`,
+`macbook_pro_14`. Match the screenshot's aspect ratio.
+
+iPhone Duo (foldable) has two displays, and App Store Connect wants a set for each:
+`iphone_duo_inner` (open, exports 2007×2853) and `iphone_duo_outer` (closed, exports
+1398×2034). Each one gets its own canvas (inner 428×608, outer 418×608) and its own sidebar
+group in the editor, so they are not a scaled-down 6.9" layout. Use screenshots taken on the
+matching Duo simulator display. To add Duo to an existing set, publish the Duo screens as their
+own plan (same copy, Duo `deviceId`s), or open the set in the editor, add the Duo groups and use
+"Copy from inner" to seed the outer screens. For the full current list (older iPhone sizes, more iPad/Mac variants,
 `_menu_bar` laptop framings, desktops), read the `id` fields in the shot-dsl source:
-<https://unpkg.com/@appshoteditor/shot-dsl@0.5.0/src/device-frames.ts> (or locally at
+<https://unpkg.com/@appshoteditor/shot-dsl@0.6.0/src/device-frames.ts> (or locally at
 `node_modules/@appshoteditor/shot-dsl/src/device-frames.ts` if you've run
 `npm install` in the skill directory) — there's no CLI command that lists them.
 
