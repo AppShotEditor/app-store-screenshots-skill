@@ -3347,7 +3347,38 @@ function readPlan(path) {
   const errors = validatePlan(plan);
   if (errors.length) fail(`invalid plan (${path}):
   - ${errors.join("\n  - ")}`);
-  return plan;
+  return withoutZoomOrCallouts(plan, path);
+}
+function withoutZoomOrCallouts(plan, path) {
+  const dropped = /* @__PURE__ */ new Set();
+  const screens = plan.screens.map((screen) => {
+    const s = { ...screen };
+    if (s.callout !== void 0) {
+      if (s.callout !== false) dropped.add("callout");
+      delete s.callout;
+    }
+    if (s.crop !== void 0) {
+      dropped.add("crop");
+      delete s.crop;
+    }
+    if (s.presentation === "zoom") {
+      dropped.add('presentation "zoom"');
+      delete s.presentation;
+    }
+    return s;
+  });
+  const style = { ...plan.style, callouts: "none" };
+  if (plan.style?.callouts === "auto") dropped.add('style.callouts "auto"');
+  if (style.presentation === "zoom") {
+    dropped.add('style.presentation "zoom"');
+    delete style.presentation;
+  }
+  if (style.rhythm?.treatment === "callout") {
+    dropped.add('style.rhythm.treatment "callout"');
+    style.rhythm = { ...style.rhythm, treatment: "text-bottom" };
+  }
+  if (dropped.size) console.error(`appshot: warning (${basename(path)}) [callouts-removed] ignored ${[...dropped].join(", ")} \u2014 the skill makes no callouts or zoom cards`);
+  return { ...plan, screens, style };
 }
 var HANDOFF_WARN_SHARE = 0.8;
 var kb = (bytes) => `${(bytes / 1024).toFixed(0)} KB`;

@@ -23,7 +23,7 @@ mechanical work:
 - composing valid layout DSL under a set-wide layout system: one device size, baseline and headline
   size, and no device "just touching" an edge;
 - the art direction on top: balanced line breaks, a hero screen, a tonal brand palette with ONE
-  readable text colour (WCAG AA everywhere), magnified callouts, the app's mascot, soft shadows;
+  readable text colour (WCAG AA everywhere), the app's mascot, soft shadows;
 - linting the copy;
 - writing three art directions;
 - creating the handoffs.
@@ -144,24 +144,13 @@ sells the benefit, as fractions of the image height (0 = top, 1 = bottom). Examp
 
 Leave out chrome that doesn't sell, such as tab bars and navigation titles. The composer keeps every
 corner of a focus band inside all four canvas edges and any panorama seam. That holds on tilted
-devices and zoom cards too: it reduces a bleed, shrinks the device or card slightly, or reduces the
-tilt to keep it. If the selling
-UI is a small detail (one card, one control), also give a `crop` `{ x, y, w, h }` (fractions) around
-it; concept B turns that screen into a magnified zoom card. Judge `focus` from the image you looked
-at, not from the shot list.
+devices too: it reduces a bleed, shrinks the device slightly, or reduces the tilt to keep it. Judge
+`focus` from the image you looked at, not from the shot list.
 
-**Mark a `callout` on the 3–5 selling screens.** A callout is the one element that proves the
-benefit — the "3 to review" row, the P-L-A-Y tiles, the "B+" grade — shown magnified (1.6–2.2×) as a
-rounded card over the device, so it reads even at search-result size (~110 px wide). Give it as a
-crop `{ x, y, w, h }` (fractions of the image) snug around that element with a small margin
-(~2% of the image on each side — the card's rounded corners clip anything touching the crop edge,
-e.g. selection handles), **at most ~60% of the image width** (wider can't be magnified) and never
-cutting through words. The card may sit over its
-own source (the pop-out) but never hides more than 35% of the rest of the `focus` band: the
-composer moves it up/down or out past the device edge, or shrinks it, and skips it
-(`callout-skipped`) if nothing works — then mark a smaller callout or a tighter focus. Don't put
-callouts on every screen; with `style.callouts: "auto"` the composer derives one only where the
-`focus` band is tight (≤ 50% of the height), which is a blind guess — explicit crops look better.
+**No callouts or zoom cards.** Don't mark a `callout` or a `crop`, and don't use the `zoom`
+presentation: magnified pop-outs don't render well in the editor. The CLI drops these fields (with a
+`callouts-removed` warning) if an older plan still has them, so every concept is plain devices or
+frameless screenshots.
 
 ### 6. Upload
 ```
@@ -197,7 +186,7 @@ will not shrink text to rescue long copy:
 Per screen, also set:
 - `deviceId` matching the screenshot's device.
 - `screenshot` from the upload manifest.
-- `focus`, and `crop` where one applies.
+- `focus`.
 - `layout` *(optional)*:
   - `text-top` (default);
   - `text-bottom` (device above, text below);
@@ -209,7 +198,7 @@ Per screen, also set:
   set gets ONE text colour that passes WCAG AA on every background — the composer adjusts the palette
   tones until it does. With an explicit background, set a contrasting `headlineColor` (a low-contrast
   one is lint-warned, `contrast-low`).
-- `callout` *(selling screens)*: see step 5. `mascot` *(optional)*: `{ "art": "<art id>", "anchor":
+- `mascot` *(optional)*: `{ "art": "<art id>", "anchor":
   "headline" | "device-top" | "device-side" | "seam" }` — the hero gets the mascot via `style.hero`.
 
 Plan-level `art` *(optional)*: `[{ "id": "bee", "url": "<upload url>", "width": 600, "height": 600,
@@ -223,9 +212,8 @@ Plan-level `style` (all optional):
 - `hero`: on by default for screen 1 (bigger type, prefers a deeper bleed but clears rather than leave a gap under the text). Give it the promise, plus
   `{ "badge": "Grades 1–12", "mascot": { "art": "bee" } }`. `false` turns it off.
 - `rhythm`: `{ "every": 4 }` — every 4th screen gets an accent layout so the set isn't one template.
-- `callouts`: `"auto"` to derive callouts from tight focus bands (explicit `callout`s always apply); `"none"` for no callouts — `variants` keeps it for A and B (C never has callouts).
 - `font`: from the list in step 3.
-- `presentation`: `device` (framed, default) | `frameless` | `zoom`.
+- `presentation`: `device` (framed, default) | `frameless`.
 - `bleed`: `auto` (default; lets the no-tangent rule decide) | `none` | `deep`. A device that would have to move down to bleed shrinks ≤ 12% to clear the edge instead, so there's never a big gap under the headline.
 - `tilt` + `tiltScreens`: 4–12° on at most 1–2 screens (the hero or a panorama), never the
   core-feature explainer.
@@ -236,9 +224,9 @@ Plan-level `style` (all optional):
   of the device can show on the next screen with the focus band kept back, else it's skipped.
 
 The 3 concepts (step 8) decide presentation, layout, palette tone, hero, rhythm, tilt and panorama
-for you. They keep your copy, badges, `focus` / `crop` / `callout`, `art`, the brand colours from
+for you. They keep your copy, badges, `focus`, `art`, the brand colours from
 `palette` and the style's `font` / `bleed`. So a base plan usually needs `palette` (tonal, brand
-colours), `hero` (badge + mascot), `art`, `panorama.decoration` and per-screen `focus` + `callout`.
+colours), `hero` (badge + mascot), `art`, `panorama.decoration` and per-screen `focus`.
 
 **Omit `canvasWidth`/`canvasHeight`.** Each screen then gets its device's canvas and the editor
 exports at the real App Store sizes; every layer is sized proportionally, so there's nothing to gain
@@ -267,16 +255,14 @@ Write `plan.json` per `schema/plan.schema.json`:
       "headline": "Their school list,\nready in seconds",
       "deviceId": "iphone_17_pro_max",
       "screenshot": { "url": "<from upload manifest>", "width": 1320, "height": 2868 },
-      "focus": { "top": 0.36, "bottom": 0.78 },
-      "callout": { "x": 0.03, "y": 0.36, "w": 0.62, "h": 0.085 }
+      "focus": { "top": 0.36, "bottom": 0.78 }
     },
     {
       "headline": "Mistakes turn\ninto lessons",
       "subheadline": "Every miss, spelled out",
       "deviceId": "iphone_17_pro_max",
       "screenshot": { "url": "<from upload manifest>", "width": 1320, "height": 2868 },
-      "focus": { "top": 0.46, "bottom": 0.94 },
-      "callout": { "x": 0.2, "y": 0.5, "w": 0.6, "h": 0.18 }
+      "focus": { "top": 0.46, "bottom": 0.94 }
     }
   ]
 }
@@ -292,7 +278,8 @@ example:
 - a headline over 5 words or more than 2 lines, or a single word stranded on its last line;
 - a subheadline over 1 line;
 - a text colour under WCAG AA on an explicit background (`contrast-low`);
-- a callout crop too wide to magnify (`callout-skipped`) or no room for a mascot (`mascot-skipped`);
+- no room for a mascot (`mascot-skipped`);
+- a `callout`, `crop` or `zoom` left in an old plan (`callouts-removed` — the CLI drops it);
 - more than 2 tilted screens;
 - a panorama seam crossing a headline or focus band;
 - a tilt reduced to keep the side margins.
@@ -338,11 +325,10 @@ for the same concept, so don't.
 The concepts are:
 
 - **A · Brand Classic**: device mockups on the vivid brand palette; the hero with the mascot and
-  badge; callouts on the selling screens; every 4th screen flips to text-bottom for rhythm. The
+  badge; every 4th screen flips to text-bottom for rhythm. The
   confident, on-brand default.
 - **B · Clean Frameless**: pale brand tints and dark text; big full-width screenshots (no device)
-  bleeding off the bottom, with callouts; the hero in large type with the mascot. Airy and modern.
-  A zoom card only where you gave a `crop`.
+  bleeding off the bottom; the hero in large type with the mascot. Airy and modern.
 - **C · Story Panorama**: the deeper brand tone as ONE continuous scene across triples and pairs of
   screens, a motif (`panorama.decoration`) flowing across the seams, the mascot flying across them,
   a tilted hero and big devices that bleed where they can. The most eye-catching in the search-results strip.
@@ -375,7 +361,7 @@ editor, so moving a straddling device on one screen doesn't move its continuatio
   - a text area sized for the tallest text block;
   - devices are at most 90% of the width and keep 5% side margins (only a panorama straddle crosses
     a side, at a seam, and only by ≥ 18% of the device);
-  - callouts and mascots never cover the text; mascots avoid callouts and the focus band's core;
+  - mascots never cover the text and avoid the focus band's core;
   - devices either clear the far edge by ≥ 4% of the height or bleed by ≥ 12% of their own height;
   - marked `focus` bands stay inside every edge and seam; a tilt is reduced if it can't keep that.
 - Device shadows need the current editor (a newer deploy casts them from the screen); an older

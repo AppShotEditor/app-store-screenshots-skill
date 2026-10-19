@@ -23,9 +23,10 @@ Node CLI, so it runs anywhere there's a shell + Node.
    - the selling UI (`focus`) stays inside every edge and panorama seam, including on tilted
      devices.
 
-   On top of that system it art-directs (shot-dsl 0.5.0): balanced line breaks, a hero screen, a
-   tonal brand palette with ONE text colour that passes WCAG AA everywhere, magnified callouts of
-   the selling element, the app's mascot, and soft shadows. It lints the copy against pro rules.
+   On top of that system it art-directs (shot-dsl 0.6.0): balanced line breaks, a hero screen, a
+   tonal brand palette with ONE text colour that passes WCAG AA everywhere, the app's mascot,
+   and soft shadows. It makes no callouts or zoom cards (they don't render well in the editor).
+   It lints the copy against pro rules.
 4. Writes **three distinct art directions** (A Brand Classic, B Clean Frameless, C Story Panorama) and
    returns one editor link per concept, as Product Page Optimization test candidates. You fine-tune
    layers, copy and backgrounds in the editor, then export.
@@ -97,11 +98,11 @@ follow `SKILL.md`: analyze → upload your screenshots → compose → hand you 
 | `screenshot` | yes | `{ url, width, height }` from the upload manifest. |
 | `background` | yes, unless `style.palette` is set | `{ type: "solid", color }` or `{ type: "gradient", gradient: { type, colorStops } }`. |
 | `focus` | no | `{ top, bottom }`: the selling UI as fractions of the screenshot height. Its corners always stay ≥ 2% inside every canvas edge and panorama seam, tilted devices included; a bleed or tilt is reduced to keep it. A zoom card too small for a band warns `zoom-focus-cropped`. |
-| `crop` | no | `{ x, y, w, h }` fractions: the zoom window (defaults to the focus band). |
-| `presentation` | no | Per-screen override of `style.presentation`. |
+| `crop` | no | Ignored — the CLI drops it with a `callouts-removed` warning (no zoom cards). |
+| `presentation` | no | Per-screen override of `style.presentation` (`zoom` is dropped by the CLI). |
 | `tilt` | no | Per-screen tilt in degrees (clockwise). |
 | `badge` | no | Short pill above the headline (1–3 words) — only true, checkable facts. |
-| `callout` | no | `{ x, y, w, h }` fractions (≤ ~60% wide): the selling element, shown 1.6–2.2× larger as a rounded card over the device, never over the text, hiding at most 35% of the rest of the `focus` band (moved, shrunk or skipped otherwise). `false` opts out of an auto callout. |
+| `callout` | no | Ignored — the CLI drops it with a `callouts-removed` warning (no callouts). |
 | `mascot` | no | `{ art, anchor?: headline \| device-top \| device-side \| seam, size?, flip? }` — brand art from plan `art`, placed clear of text, callouts and the focus band. |
 
 Plan-level `art` (optional): `[{ id, url, width, height, faces? }]` — mascot PNGs uploaded like screenshots.
@@ -115,14 +116,14 @@ plan that passed under 0.4.0:
 
 | Style field | Notes |
 | --- | --- |
-| `presentation` | `device` (default, framed) · `frameless` (rounded screenshot + shadow) · `zoom` (magnified crop of `crop` / the focus band). |
+| `presentation` | `device` (default, framed) · `frameless` (rounded screenshot + shadow). `zoom` is dropped by the CLI. |
 | `bleed` | `auto` (default; the no-tangent rule: a device that clears by ≥ 4% of H stays; one that would touch the edge bleeds ≥ 12% of its height instead, and clears only when every such bleed would crop its focus band) · `none` · `deep` (the device grows toward a 25% bleed, capped at 90% width). Under `auto` and `deep`, a device that would have to move down to reach a 12% bleed shrinks ≤ 12% to clear the edge instead; if that isn't enough it moves down only as far as a 12% bleed needs. |
 | `tilt` + `tiltScreens` | Degrees applied only to the listed screen indices. Use it as an accent on at most 1–2 screens. A tilted device prefers a bleed under `auto` / `deep`. If a tilted device, frameless screenshot or zoom card can't keep its 5% side margins (and its focus band inside), it is shrunk by at most 20%, keeping a zoom card's aspect. After that the tilt is reduced, with a `tilt-reduced` warning. |
 | `palette` | `{ mode: "tonal", colors: [base, accent?], tone?: "light" \| "vivid" \| "deep" }` (recommended: light↔deep steps of the brand hue) or legacy `family` / `sequence`. Backgrounds for screens that omit one, with ONE WCAG-AA text colour per set. |
 | `panorama` | `{ spans?: [[0,1], …], straddle?, decoration?: "orbs" \| "honeycomb" \| "wave" \| "none" }`. Adjacent screens share one continuous background (a tonal palette: one ramp through the span); `honeycomb` / `wave` draw one motif across every seam. `straddle` is `true` (every span) or a list of span-start indices; a device only crosses when ≥ 18% of it can show on the next screen. |
 | `hero` | Default ON for screen 1: `{ screen?, scale?, layout?, bleed? (deep), tilt?, badge?, mascot? }` — bigger type, deeper bleed, optional badge + mascot. `false` turns it off. |
-| `rhythm` | `{ every: 3–6, treatment?: "text-bottom" \| "callout" }` — an accent screen every N so the set isn't one template. |
-| `callouts` | `"auto"`: derive a callout from a tight `focus` band (≤ 50% tall) where no explicit one is given. `"none"`: no callouts (kept by `variants` for A and B; C never has callouts). |
+| `rhythm` | `{ every: 3–6, treatment?: "text-bottom" }` — an accent screen every N so the set isn't one template (a `"callout"` treatment becomes `text-bottom`). |
+| `callouts` | Ignored — always `"none"` (the CLI makes no callouts). |
 | `shadows` | Default `true`: soft brand-tinted shadows on devices, frameless shots, callouts and mascots. |
 | `font` | One of the editor's fonts (Inter default, Arial, Helvetica, Georgia, Times New Roman, Courier New, Verdana, Trebuchet MS, Impact, Comic Sans MS). Line wraps are estimated with per-font metrics, so wide faces reserve more room. |
 
@@ -141,18 +142,18 @@ can't reach a usable size on the canvas even with no copy, the error says the ca
 instead ("doesn't fit a W×H canvas … use the device's own canvas").
 
 **Art directions (`variants` / `publish --variants`).**
-- **A Brand Classic**: device frames, vivid tonal palette, hero with mascot + badge, callouts,
+- **A Brand Classic**: device frames, vivid tonal palette, hero with mascot + badge,
   every 4th screen text-bottom.
 - **B Clean Frameless**: light tonal palette + dark text, big full-width frameless screenshots
-  bleeding deep, callouts, large-type hero with the mascot (a zoom card only for an explicit `crop`).
+  bleeding deep, large-type hero with the mascot.
 - **C Story Panorama**: deep tonal palette as one scene across triples/pairs, a motif across the
   seams, the mascot crossing seams, a tilted hero (your `style.tilt`, or 8°), deep bleeds.
 - **Kept** from your plan: copy, badges, colours, `background`, `deviceId`, `screenshot`, `focus`,
-  `crop`, `callout`, `mascot`, `art`, canvas size, the brand colours of `palette`, `font` and
+  `mascot`, `art`, canvas size, the brand colours of `palette`, `font` and
   `bleed: none`.
 - **Overridden:** every `layout` becomes `text-top` (the hero and rhythm accents differ on purpose);
   per-screen `presentation` / `tilt` are dropped; the palette becomes `tonal` with the concept's
-  tone; hero, rhythm, callouts and panorama are set per concept (C keeps your `panorama.spans` /
+  tone; hero, rhythm and panorama are set per concept (C keeps your `panorama.spans` /
   `decoration` / `straddle` when given).
 
 **Panorama backgrounds.** The span's first screen's background runs across the whole span:
